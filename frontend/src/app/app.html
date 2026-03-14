@@ -1,0 +1,17 @@
+<nav class="navbar">
+  <div class="nav-brand">SPA Security Test</div>
+  <div class="nav-links">
+    <a routerLink="/home" routerLinkActive="active">Home</a>
+    <a routerLink="/users" routerLinkActive="active">Users</a>
+    <a routerLink="/items" routerLinkActive="active">Items</a>
+    @if (auth.isLoggedIn()) {
+      <button type="button" (click)="auth.logout()" class="btn-link">Logout ({{ auth.currentUser()?.username }})</button>
+    } @else {
+      <a routerLink="/login" routerLinkActive="active">Login</a>
+    }
+  </div>
+</nav>
+
+<main class="container">
+  <router-outlet />
+</main>

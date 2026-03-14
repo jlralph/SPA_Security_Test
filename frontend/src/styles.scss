@@ -1,0 +1,212 @@
+/* Global styles */
+.page {
+  h1 { margin-bottom: 1.5rem; color: #1a1a2e; }
+}
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.5rem;
+}
+
+.card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  margin-bottom: 1.5rem;
+}
+
+.actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.btn, .btn-primary, .btn-danger {
+  display: inline-block;
+  padding: 0.5rem 1.2rem;
+  border-radius: 5px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  border: none;
+  transition: background 0.2s;
+}
+
+.btn {
+  background: #1a1a2e;
+  color: #fff;
+  &:hover { background: #2d2d4e; }
+}
+
+.btn-primary {
+  background: #c0304d;
+  color: #fff;
+  width: 100%;
+  padding: 0.7rem;
+  font-size: 1rem;
+  &:hover { background: #a0263f; }
+  &:disabled { background: #999; cursor: not-allowed; }
+}
+
+.btn-danger {
+  background: #dc3545;
+  color: #fff;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  &:hover { background: #b02a37; }
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  background: #e2e8f0;
+  color: #333;
+  &.badge-admin { background: #fde8ed; color: #c0304d; }
+  &.badge-user  { background: #e8f4fd; color: #1a6ea8; }
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+
+  th {
+    background: #1a1a2e;
+    color: #fff;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    font-size: 0.85rem;
+  }
+
+  td {
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.9rem;
+  }
+
+  tr:hover td { background: #f9f9fb; }
+}
+
+.item-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.2rem;
+}
+
+.item-card {
+  background: #fff;
+  border-radius: 8px;
+  padding: 1.2rem;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+
+  .item-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+    .item-name { font-weight: 600; }
+    .item-price { color: #c0304d; font-weight: 700; }
+  }
+
+  .item-desc { color: #666; font-size: 0.88rem; margin-bottom: 0.8rem; }
+
+  .item-footer {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    flex-wrap: wrap;
+  }
+}
+
+.stock-yes { color: #2d7a2d; font-size: 0.8rem; font-weight: 600; }
+.stock-no  { color: #c0304d; font-size: 0.8rem; font-weight: 600; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 1rem;
+
+  label { font-size: 0.85rem; font-weight: 600; color: #555; }
+
+  input[type="text"],
+  input[type="password"],
+  input[type="number"] {
+    padding: 0.55rem 0.8rem;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-size: 0.95rem;
+    &:focus { outline: none; border-color: #c0304d; }
+  }
+}
+
+.field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.field-check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  label { font-size: 0.9rem; }
+}
+
+.alert-error {
+  background: #fde8ed;
+  color: #c0304d;
+  border-left: 4px solid #c0304d;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.login-page {
+  min-height: calc(100vh - 60px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 2.5rem;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+
+  h1 { text-align: center; margin-bottom: 1.5rem; color: #1a1a2e; }
+}
+
+.hint {
+  margin-top: 1.2rem;
+  font-size: 0.82rem;
+  color: #888;
+  text-align: center;
+  code { background: #f0f0f0; padding: 0.1rem 0.3rem; border-radius: 3px; }
+}
+
+.loading { color: #888; font-style: italic; }
+.error   { color: #c0304d; font-weight: 600; }
+
+dl {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 0.5rem 1rem;
+  dt { font-weight: 600; color: #555; font-size: 0.9rem; }
+  dd { font-size: 0.9rem; }
+}
+
+.profile-card h2 { margin-bottom: 1rem; }
+.form-card h2 { margin-bottom: 1rem; }

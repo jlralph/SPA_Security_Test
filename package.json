@@ -1,0 +1,12 @@
+{
+  "name": "spa-security-test",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently --names \"API,NG\" --prefix-colors \"cyan,magenta\" \"npm run dev --prefix backend\" \"npm run start --prefix frontend\"",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run start --prefix frontend"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

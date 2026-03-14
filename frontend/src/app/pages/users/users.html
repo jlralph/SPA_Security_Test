@@ -1,0 +1,36 @@
+<div class="page">
+  <h1>Users</h1>
+
+  @if (loading()) {
+    <p class="loading">Loading users…</p>
+  } @else if (error()) {
+    <p class="error">{{ error() }}</p>
+  } @else {
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Username</th>
+          <th>Email</th>
+          <th>Role</th>
+          <th>Created</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (user of users(); track user.id) {
+          <tr>
+            <td>{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>{{ user.email }}</td>
+            <td><span class="badge badge-{{ user.role }}">{{ user.role }}</span></td>
+            <td>{{ user.createdAt | date:'mediumDate' }}</td>
+            <td>
+              <button type="button" class="btn-danger" (click)="deleteUser(user.id)">Delete</button>
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  }
+</div>

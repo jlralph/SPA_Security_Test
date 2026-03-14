@@ -1,0 +1,29 @@
+<div class="home">
+  <h1>Welcome to SPA Security Test</h1>
+  <p class="subtitle">A sample Angular 19 app with authenticated REST endpoints.</p>
+
+  @if (auth.isLoggedIn()) {
+    <div class="card profile-card">
+      <h2>Your Profile</h2>
+      @if (profile()) {
+        <dl>
+          <dt>Username</dt><dd>{{ profile()!.username }}</dd>
+          <dt>Email</dt><dd>{{ profile()!.email }}</dd>
+          <dt>Role</dt><dd><span class="badge">{{ profile()!.role }}</span></dd>
+        </dl>
+      } @else if (profileError()) {
+        <p class="error">{{ profileError() }}</p>
+      } @else {
+        <p class="loading">Loading profile…</p>
+      }
+    </div>
+    <div class="actions">
+      <a routerLink="/users" class="btn">View Users</a>
+      <a routerLink="/items" class="btn">View Items</a>
+    </div>
+  } @else {
+    <div class="card">
+      <p>Please <a routerLink="/login">log in</a> to access protected resources.</p>
+    </div>
+  }
+</div>
