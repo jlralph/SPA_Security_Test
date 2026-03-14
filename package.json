@@ -2,9 +2,10 @@
   "name": "spa-security-test",
   "private": true,
   "scripts": {
-    "dev": "concurrently --names \"API,NG\" --prefix-colors \"cyan,magenta\" \"npm run dev --prefix backend\" \"npm run start --prefix frontend\"",
+    "dev": "npm run dev:backend",
     "dev:backend": "npm run dev --prefix backend",
-    "dev:frontend": "npm run start --prefix frontend"
+    "build:frontend": "npm run build --prefix frontend",
+    "dev:frontend": "echo \"Frontend is served by Apache. Build with 'npm run build:frontend' then start Apache — see apache.conf.\""
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

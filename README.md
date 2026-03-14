@@ -2,11 +2,14 @@
 
 An Angular 19 single-page application with an Express 5 REST API backend, intended as a testbed for SPA security research.
 
+> **Branch `apache`** — the Angular frontend is served by Apache httpd instead of the Angular dev server. The Express backend is unchanged.
+
 ## Project Structure
 
 ```
 SPA_Security_Test/
-├── package.json              # Root dev script (concurrently)
+├── package.json              # Root dev script
+├── apache.conf               # Apache virtual host (port 4200, proxies /api → :3000)
 ├── README.md
 ├── backend/
 │   ├── package.json
@@ -15,7 +18,7 @@ SPA_Security_Test/
 │       └── server.ts         # Express 5 API server
 └── frontend/
     ├── angular.json
-    ├── proxy.conf.json       # Proxies /api → localhost:3000
+    ├── proxy.conf.json       # Used by ng serve only (not Apache)
     └── src/
         └── app/
             ├── guards/
@@ -41,10 +44,9 @@ SPA_Security_Test/
 
 - Node.js 18+
 - npm 9+
+- Apache httpd with `mod_rewrite`, `mod_proxy`, and `mod_proxy_http` enabled
 
 ### Install dependencies
-
-From the project root, install root dependencies then each workspace:
 
 ```bash
 npm install
@@ -52,20 +54,52 @@ npm install --prefix backend
 npm install --prefix frontend
 ```
 
-### Start both servers together
+### Build the Angular app
+
+Apache serves the compiled static files, so build before starting:
 
 ```bash
-npm run dev
+npm run build:frontend
 ```
 
-This runs the Angular dev server (`localhost:4200`) and the Express API (`localhost:3000`) concurrently. The Angular proxy forwards all `/api` requests to the backend.
+Output lands in `frontend/dist/frontend/browser/`.
 
-### Start servers individually
+### Configure Apache
+
+1. Enable the required modules in `httpd.conf`:
+
+   ```apache
+   LoadModule rewrite_module    modules/mod_rewrite.so
+   LoadModule proxy_module      modules/mod_proxy.so
+   LoadModule proxy_http_module modules/mod_proxy_http.so
+   ```
+
+2. Add to `httpd.conf` (adjust the path to match your machine):
+
+   ```apache
+   Listen 4200
+   Include "E:/Storage/SPA_Security_Test/apache.conf"
+   ```
+
+3. Restart Apache.
+
+### Start the backend
 
 ```bash
-npm run dev:backend    # Express API only  → http://localhost:3000
-npm run dev:frontend   # Angular SPA only  → http://localhost:4200
+npm run dev          # or: npm run dev:backend
 ```
+
+Starts the Express API on `http://localhost:3000`.
+
+Open `http://localhost:4200` — Apache serves the Angular app and proxies all `/api` requests to the Express backend.
+
+## npm scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start the Express backend |
+| `npm run dev:backend` | Start the Express backend |
+| `npm run build:frontend` | Build the Angular app for Apache to serve |
 
 ## API Endpoints
 
