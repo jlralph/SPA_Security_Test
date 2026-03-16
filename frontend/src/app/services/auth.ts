@@ -3,6 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { tap } from 'rxjs/operators';
 import { LoginRequest, LoginResponse, User } from '../models/user.model';
+import { environment } from '../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -13,7 +14,7 @@ export class AuthService {
   isLoggedIn = signal<boolean>(!!localStorage.getItem('token'));
 
   login(credentials: LoginRequest) {
-    return this.http.post<LoginResponse>('/api/auth/login', credentials).pipe(
+    return this.http.post<LoginResponse>(`${environment.apiAuth}/api/auth/login`, credentials).pipe(
       tap(res => {
         localStorage.setItem('token', res.token);
         localStorage.setItem('user', JSON.stringify(res.user));

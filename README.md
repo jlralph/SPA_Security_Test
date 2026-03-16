@@ -2,24 +2,44 @@
 
 An Angular 19 single-page application with an Express 5 REST API backend, intended as a testbed for SPA security research.
 
-> **Branch `apache`** — the Angular frontend is served by Apache httpd instead of the Angular dev server. The Express backend is unchanged.
+> **Branch `apache-many`** — Apache serves both frontend and backend entirely. No Node.js process is needed. Each API resource group has its own VirtualHost on a dedicated port, serving pre-baked JSON fixtures from `api-static/`. The frontend calls each VirtualHost directly.
+>
+> | Port | VirtualHost | Serves |
+> |------|-------------|--------|
+> | 4200 | Frontend    | Angular SPA static files |
+> | 3001 | Auth API    | `POST /api/auth/login` → `api-static/auth/login.json` |
+> | 3002 | Profile API | `GET /api/profile` → `api-static/profile.json` |
+> | 3003 | Users API   | `GET/DELETE /api/users/*` → `api-static/users/*.json` |
+> | 3004 | Items API   | `GET/POST/DELETE /api/items/*` → `api-static/items/*.json` |
+>
+> Login always succeeds and returns a fixed admin JWT — any credentials are accepted (static demo).
 
 ## Project Structure
 
 ```
 SPA_Security_Test/
-├── package.json              # Root dev script
-├── apache.conf               # Apache virtual host (port 4200, proxies /api → :3000)
+├── package.json              # Root scripts (only build:frontend needed)
+├── apache-many.conf          # Apache config — one VirtualHost per API resource group
 ├── README.md
-├── backend/
-│   ├── package.json
-│   └── src/
-│       ├── data.ts           # In-memory seed data
-│       └── server.ts         # Express 5 API server
+├── api-static/               # Static JSON fixtures served by Apache API VirtualHosts
+│   ├── auth/
+│   │   └── login.json        # POST /api/auth/login response
+│   ├── profile.json          # GET  /api/profile response
+│   ├── users.json            # GET  /api/users response
+│   ├── users/
+│   │   ├── 1.json            # GET  /api/users/1
+│   │   ├── 2.json
+│   │   └── 3.json
+│   ├── items.json            # GET  /api/items response
+│   └── items/
+│       ├── 1.json – 4.json   # GET  /api/items/:id
+│       └── created.json      # POST /api/items stub response
+├── backend/                  # Express source — not used in this branch (kept for reference)
 └── frontend/
     ├── angular.json
-    ├── proxy.conf.json       # Used by ng serve only (not Apache)
     └── src/
+        ├── environments/
+        │   └── environment.ts  # API base URLs per VirtualHost port
         └── app/
             ├── guards/
             │   └── auth.guard.ts
@@ -34,7 +54,7 @@ SPA_Security_Test/
             │   ├── login/
             │   └── users/
             └── services/
-                ├── api.ts    # All HTTP calls
+                ├── api.ts    # HTTP calls — absolute URLs from environment
                 └── auth.ts   # Login/logout/token (signals)
 ```
 
@@ -42,23 +62,13 @@ SPA_Security_Test/
 
 ### Prerequisites
 
-- Node.js 18+
-- npm 9+
-- Apache httpd with `mod_rewrite`, `mod_proxy`, and `mod_proxy_http` enabled
+- Node.js 18+ and npm 9+ (only needed to build the Angular app)
+- Apache httpd with `mod_rewrite` and `mod_headers` enabled
 
-### Install dependencies
+### Install and build the Angular app
 
 ```bash
-npm install
-npm install --prefix backend
 npm install --prefix frontend
-```
-
-### Build the Angular app
-
-Apache serves the compiled static files, so build before starting:
-
-```bash
 npm run build:frontend
 ```
 
@@ -69,29 +79,22 @@ Output lands in `frontend/dist/frontend/browser/`.
 1. Enable the required modules in `httpd.conf`:
 
    ```apache
-   LoadModule rewrite_module    modules/mod_rewrite.so
-   LoadModule proxy_module      modules/mod_proxy.so
-   LoadModule proxy_http_module modules/mod_proxy_http.so
+   LoadModule rewrite_module  modules/mod_rewrite.so
+   LoadModule headers_module  modules/mod_headers.so
    ```
 
-2. Add to `httpd.conf` (adjust the path to match your machine):
+2. Add to `httpd.conf` (adjust the path to match your machine).
+   Remove any other `apache.conf` / `apache-many.conf` Include first:
 
    ```apache
-   Listen 4200
-   Include "E:/Storage/SPA_Security_Test/apache.conf"
+   Include "E:/Storage/SPA_Security_Test/apache-many.conf"
    ```
 
 3. Restart Apache.
 
-### Start the backend
+No backend process is needed — Apache serves everything directly.
 
-```bash
-npm run dev          # or: npm run dev:backend
-```
-
-Starts the Express API on `http://localhost:3000`.
-
-Open `http://localhost:4200` — Apache serves the Angular app and proxies all `/api` requests to the Express backend.
+Open `http://localhost:4200`. The Angular app calls each API VirtualHost on its own port (`localhost:3001` – `localhost:3004`).
 
 ## npm scripts
 

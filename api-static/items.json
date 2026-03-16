@@ -1,0 +1,6 @@
+[
+  { "id": 1, "name": "Widget A",     "description": "A standard widget",          "price": 9.99,  "category": "Widgets",     "inStock": true  },
+  { "id": 2, "name": "Gadget Pro",   "description": "Professional grade gadget",  "price": 49.99, "category": "Gadgets",     "inStock": true  },
+  { "id": 3, "name": "Doohickey",    "description": "Useful doohickey for tasks", "price": 14.50, "category": "Accessories", "inStock": false },
+  { "id": 4, "name": "Thingamajig", "description": "Multi-purpose thingamajig",  "price": 24.99, "category": "Widgets",     "inStock": true  }
+]
