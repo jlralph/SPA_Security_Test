@@ -1,45 +1,50 @@
 # SPA Security Test
 
-An Angular 19 single-page application with an Express 5 REST API backend, intended as a testbed for SPA security research.
+An Angular 19 single-page application served entirely by Apache httpd, intended as a testbed for SPA security research.
 
-> **Branch `apache-many`** — Apache serves both frontend and backend entirely. No Node.js process is needed. Each API resource group has its own VirtualHost on a dedicated port, serving pre-baked JSON fixtures from `api-static/`. The frontend calls each VirtualHost directly.
+> **Branch `apache-many`** — Apache serves both frontend and backend. No Node.js process is needed. Each API resource group has its own VirtualHost on a dedicated port, serving pre-baked JSON fixtures from `api-static/`. The Angular app calls each VirtualHost directly — nothing routes through port 4200.
 >
 > | Port | VirtualHost | Serves |
 > |------|-------------|--------|
 > | 4200 | Frontend    | Angular SPA static files |
-> | 3001 | Auth API    | `POST /api/auth/login` → `api-static/auth/login.json` |
-> | 3002 | Profile API | `GET /api/profile` → `api-static/profile.json` |
-> | 3003 | Users API   | `GET/DELETE /api/users/*` → `api-static/users/*.json` |
-> | 3004 | Items API   | `GET/POST/DELETE /api/items/*` → `api-static/items/*.json` |
+> | 3001 | Auth        | `POST /api/auth/login` → `api-static/auth/login.json` |
+> | 3002 | Profile     | `GET /api/profile` → `api-static/profile.json` |
+> | 3003 | Users       | `GET/DELETE /api/users/*` → `api-static/users/*.json` |
+> | 3004 | Items       | `GET/POST/DELETE /api/items/*` → `api-static/items/*.json` |
 >
 > Login always succeeds and returns a fixed admin JWT — any credentials are accepted (static demo).
+> `DELETE` and `POST /api/items` return correct status codes but do not mutate state.
+> All API responses are sent with `Cache-Control: no-store`.
 
 ## Project Structure
 
 ```
 SPA_Security_Test/
-├── package.json              # Root scripts (only build:frontend needed)
+├── package.json              # Root scripts (build:frontend only)
 ├── apache-many.conf          # Apache config — one VirtualHost per API resource group
 ├── README.md
-├── api-static/               # Static JSON fixtures served by Apache API VirtualHosts
+├── api-static/               # JSON fixtures served by the API VirtualHosts
 │   ├── auth/
-│   │   └── login.json        # POST /api/auth/login response
-│   ├── profile.json          # GET  /api/profile response
-│   ├── users.json            # GET  /api/users response
+│   │   └── login.json        # POST /api/auth/login  (fixed admin response)
+│   ├── profile.json          # GET  /api/profile
+│   ├── users.json            # GET  /api/users
 │   ├── users/
 │   │   ├── 1.json            # GET  /api/users/1
-│   │   ├── 2.json
-│   │   └── 3.json
-│   ├── items.json            # GET  /api/items response
+│   │   ├── 2.json            # GET  /api/users/2
+│   │   └── 3.json            # GET  /api/users/3
+│   ├── items.json            # GET  /api/items
 │   └── items/
-│       ├── 1.json – 4.json   # GET  /api/items/:id
-│       └── created.json      # POST /api/items stub response
-├── backend/                  # Express source — not used in this branch (kept for reference)
+│       ├── 1.json            # GET  /api/items/1
+│       ├── 2.json            # GET  /api/items/2
+│       ├── 3.json            # GET  /api/items/3
+│       ├── 4.json            # GET  /api/items/4
+│       └── created.json      # POST /api/items  (fixed stub response)
+├── backend/                  # Express 5 source — not used in this branch (reference only)
 └── frontend/
     ├── angular.json
     └── src/
         ├── environments/
-        │   └── environment.ts  # API base URLs per VirtualHost port
+        │   └── environment.ts  # API base URLs keyed by resource group
         └── app/
             ├── guards/
             │   └── auth.guard.ts
@@ -55,7 +60,7 @@ SPA_Security_Test/
             │   └── users/
             └── services/
                 ├── api.ts    # HTTP calls — absolute URLs from environment
-                └── auth.ts   # Login/logout/token (signals)
+                └── auth.ts   # Login / logout / token storage (signals)
 ```
 
 ## How to Run
@@ -63,9 +68,17 @@ SPA_Security_Test/
 ### Prerequisites
 
 - Node.js 18+ and npm 9+ (only needed to build the Angular app)
-- Apache httpd with `mod_rewrite` and `mod_headers` enabled
+- Apache httpd with the following modules enabled in `httpd.conf`:
 
-### Install and build the Angular app
+  ```apache
+  LoadModule rewrite_module      modules/mod_rewrite.so
+  LoadModule headers_module      modules/mod_headers.so
+  LoadModule log_forensic_module modules/mod_log_forensic.so
+  ```
+
+### Build the Angular app
+
+Apache serves the compiled static files, so build once before starting (and rebuild after any frontend change):
 
 ```bash
 npm install --prefix frontend
@@ -76,55 +89,62 @@ Output lands in `frontend/dist/frontend/browser/`.
 
 ### Configure Apache
 
-1. Enable the required modules in `httpd.conf`:
+Add to `httpd.conf`, replacing any existing `apache.conf` or `apache-many.conf` Include:
 
-   ```apache
-   LoadModule rewrite_module  modules/mod_rewrite.so
-   LoadModule headers_module  modules/mod_headers.so
-   ```
+```apache
+Include "E:/Storage/SPA_Security_Test/apache-many.conf"
+```
 
-2. Add to `httpd.conf` (adjust the path to match your machine).
-   Remove any other `apache.conf` / `apache-many.conf` Include first:
+Then restart Apache:
 
-   ```apache
-   Include "E:/Storage/SPA_Security_Test/apache-many.conf"
-   ```
+```
+E:\Apache24\bin\httpd.exe -k restart
+```
 
-3. Restart Apache.
+No backend process is needed — Apache serves everything.
 
-No backend process is needed — Apache serves everything directly.
-
-Open `http://localhost:4200`. The Angular app calls each API VirtualHost on its own port (`localhost:3001` – `localhost:3004`).
+Open `http://localhost:4200`.
 
 ## npm scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Start the Express backend |
-| `npm run dev:backend` | Start the Express backend |
 | `npm run build:frontend` | Build the Angular app for Apache to serve |
 
 ## API Endpoints
 
-All endpoints except `/api/auth/login` require a `Bearer` token in the `Authorization` header.
+All endpoints except `/api/auth/login` require a `Bearer` token in the `Authorization` header (token is not validated — static demo).
 
-| Method   | Path               | Auth          | Description            |
-|----------|--------------------|---------------|------------------------|
-| `POST`   | `/api/auth/login`  | —             | Obtain a JWT token     |
-| `GET`    | `/api/profile`     | JWT           | Current user's profile |
-| `GET`    | `/api/users`       | JWT           | List all users         |
-| `GET`    | `/api/users/:id`   | JWT           | Get a single user      |
-| `DELETE` | `/api/users/:id`   | JWT + admin   | Delete a user          |
-| `GET`    | `/api/items`       | JWT           | List all items         |
-| `GET`    | `/api/items/:id`   | JWT           | Get a single item      |
-| `POST`   | `/api/items`       | JWT           | Create an item         |
-| `DELETE` | `/api/items/:id`   | JWT + admin   | Delete an item         |
+| Method   | Path              | Port | Auth        | Static fixture              |
+|----------|-------------------|------|-------------|----------------------------|
+| `POST`   | `/api/auth/login` | 3001 | —           | `auth/login.json`          |
+| `GET`    | `/api/profile`    | 3002 | JWT (unck.) | `profile.json`             |
+| `GET`    | `/api/users`      | 3003 | JWT (unck.) | `users.json`               |
+| `GET`    | `/api/users/:id`  | 3003 | JWT (unck.) | `users/:id.json`           |
+| `DELETE` | `/api/users/:id`  | 3003 | JWT (unck.) | 204 No Content             |
+| `GET`    | `/api/items`      | 3004 | JWT (unck.) | `items.json`               |
+| `GET`    | `/api/items/:id`  | 3004 | JWT (unck.) | `items/:id.json`           |
+| `POST`   | `/api/items`      | 3004 | JWT (unck.) | `items/created.json`       |
+| `DELETE` | `/api/items/:id`  | 3004 | JWT (unck.) | 204 No Content             |
+
+JWT (unck.) — token is forwarded but not cryptographically validated (no backend process).
 
 ## Demo Credentials
+
+Any username and password are accepted. The login endpoint always returns a fixed admin JWT and the admin user object.
 
 | Username | Password   | Role  |
 |----------|------------|-------|
 | `admin`  | `password` | admin |
 | `user`   | `password` | user  |
 
-Admin accounts can delete users and items. Regular user accounts have read and create access only.
+## Logs
+
+Each VirtualHost writes to its own set of log files under `E:/Apache24/logs/`:
+
+| VirtualHost | Forensic log | Host-audit log | Error log | Access log |
+|-------------|-------------|----------------|-----------|------------|
+| Auth :3001  | `spa-security-auth-service-forensic.log` | `spa-security-auth-service-host-audit.log` | `spa-security-auth-service-error.log` | `spa-security-auth-service-access.log` |
+| Profile :3002 | `spa-security-profile-service-forensic.log` | `spa-security-profile-service-host-audit.log` | `spa-security-profile-service-error.log` | `spa-security-profile-service-access.log` |
+| Users :3003 | `spa-security-users-service-forensic.log` | `spa-security-users-service-host-audit.log` | `spa-security-users-service-error.log` | `spa-security-users-service-access.log` |
+| Items :3004 | `spa-security-items-service-forensic.log` | `spa-security-items-service-host-audit.log` | `spa-security-items-service-error.log` | `spa-security-items-service-access.log` |
