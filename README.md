@@ -92,13 +92,15 @@ Output lands in `frontend/dist/frontend/browser/`.
 Add to `httpd.conf`, replacing any existing `apache.conf` or `apache-many.conf` Include:
 
 ```apache
-Include "E:/Storage/SPA_Security_Test/apache-many.conf"
+Include "<YourPathToProject>/apache-many.conf"
+
+Ex: Include "E:/Storage/SPA_Security_Test/apache-many.conf"
 ```
 
 Then restart Apache:
 
 ```
-E:\Apache24\bin\httpd.exe -k restart
+<YourApacheInstallPath>/bin ./http.exe
 ```
 
 No backend process is needed — Apache serves everything.
