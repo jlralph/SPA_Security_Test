@@ -53,6 +53,15 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "apache": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.apache.ts"
+                }
+              ],
+              "outputHashing": "all"
             }
           },
           "defaultConfiguration": "production"

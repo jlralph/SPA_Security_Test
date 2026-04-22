@@ -33,8 +33,11 @@ SPA_Security_Test/
 ├── backend/                  # Express 5 + TypeScript API (real backend)
 │   └── src/server.ts
 ├── frontend/                 # Angular 19 SPA
-│   ├── angular.json
+│   ├── angular.json          # build configurations: production, development, apache
 │   └── src/
+│       └── environments/
+│           ├── environment.ts         # OAST / Docker — all APIs on :3000
+│           └── environment.apache.ts  # Apache static — split ports 3001-3004
 └── oast/                     # Docker-based isolated OAST test environment
     ├── docker-compose.yml    # Runs all three services
     ├── backend.Dockerfile
@@ -65,9 +68,9 @@ No real backend. Apache serves pre-baked JSON for all API calls.
 ### Steps
 
 ```bash
-# 1. Build the Angular app
+# 1. Build the Angular app with the Apache environment
 npm install --prefix frontend
-npm run build:frontend
+npm run build:frontend:apache
 # Output: frontend/dist/frontend/browser/
 
 # 2. Point Apache at the config
@@ -109,6 +112,14 @@ Each VirtualHost writes to `E:/Apache24/logs/`:
 
 ---
 
+### Build scripts (Apache mode)
+
+| Script | Description |
+|--------|-------------|
+| `npm run build:frontend:apache` | Build the Angular app with the Apache environment (split ports 3001-3004) |
+
+---
+
 ## Mode 2 — Docker + OAST (isolated local test)
 
 Runs the real Express backend, the Angular SPA (via nginx), and a custom OAST server — all in an isolated Docker network. No public domain or IP required.
@@ -141,9 +152,12 @@ cd oast
 docker compose up --build
 ```
 
+The frontend image runs `ng build` (default `production` configuration), which picks up `environment.ts` — all API calls route to the Express backend on `:3000`.
+
 | URL | Purpose |
 |-----|---------|
-| `http://localhost:4200` | Angular SPA |
+| `http://localhost:3000` | Express API (direct) |
+| `http://localhost:4200` | Angular SPA (via nginx) |
 | `http://localhost:8080` | OAST interaction log |
 
 ### Triggering a DNS + HTTP interaction
