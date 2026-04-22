@@ -1,6 +1,6 @@
 # SPA Security Test
 
-An Angular 19 single-page application served entirely by Apache httpd, intended as a testbed for SPA security research.
+An Angular 19 single-page application intended as a testbed for SPA security research. Two runtime modes are available: a static Apache-only setup for fast traffic inspection, and a Docker-based setup with a real Express backend and an integrated OAST server for out-of-band testing.
 
 > **Branch `apache-many`** — Apache serves both frontend and backend. No Node.js process is needed. Each API resource group has its own VirtualHost on a dedicated port, serving pre-baked JSON fixtures from `api-static/`. The Angular app calls each VirtualHost directly — nothing routes through port 4200.
 >
@@ -20,55 +20,41 @@ An Angular 19 single-page application served entirely by Apache httpd, intended 
 
 ```
 SPA_Security_Test/
-├── package.json              # Root scripts (build:frontend only)
+├── package.json              # Root scripts
 ├── apache-many.conf          # Apache config — one VirtualHost per API resource group
 ├── README.md
 ├── api-static/               # JSON fixtures served by the API VirtualHosts
-│   ├── auth/
-│   │   └── login.json        # POST /api/auth/login  (fixed admin response)
+│   ├── auth/login.json       # POST /api/auth/login  (fixed admin response)
 │   ├── profile.json          # GET  /api/profile
 │   ├── users.json            # GET  /api/users
-│   ├── users/
-│   │   ├── 1.json            # GET  /api/users/1
-│   │   ├── 2.json            # GET  /api/users/2
-│   │   └── 3.json            # GET  /api/users/3
+│   ├── users/{1,2,3}.json    # GET  /api/users/:id
 │   ├── items.json            # GET  /api/items
-│   └── items/
-│       ├── 1.json            # GET  /api/items/1
-│       ├── 2.json            # GET  /api/items/2
-│       ├── 3.json            # GET  /api/items/3
-│       ├── 4.json            # GET  /api/items/4
-│       └── created.json      # POST /api/items  (fixed stub response)
-├── backend/                  # Express 5 source — not used in this branch (reference only)
-└── frontend/
-    ├── angular.json
-    └── src/
-        ├── environments/
-        │   └── environment.ts  # API base URLs keyed by resource group
-        └── app/
-            ├── guards/
-            │   └── auth.guard.ts
-            ├── interceptors/
-            │   └── auth.interceptor.ts
-            ├── models/
-            │   ├── item.model.ts
-            │   └── user.model.ts
-            ├── pages/
-            │   ├── home/
-            │   ├── items/
-            │   ├── login/
-            │   └── users/
-            └── services/
-                ├── api.ts    # HTTP calls — absolute URLs from environment
-                └── auth.ts   # Login / logout / token storage (signals)
+│   └── items/{1-4}.json      # GET  /api/items/:id
+├── backend/                  # Express 5 + TypeScript API (real backend)
+│   └── src/server.ts
+├── frontend/                 # Angular 19 SPA
+│   ├── angular.json
+│   └── src/
+└── oast/                     # Docker-based isolated OAST test environment
+    ├── docker-compose.yml    # Runs all three services
+    ├── backend.Dockerfile
+    ├── frontend.Dockerfile
+    ├── nginx.conf
+    └── server/               # Custom DNS + HTTP interaction capture server
+        ├── index.js
+        └── package.json
 ```
 
-## How to Run
+---
+
+## Mode 1 — Apache static (this branch)
+
+No real backend. Apache serves pre-baked JSON for all API calls.
 
 ### Prerequisites
 
-- Node.js 18+ and npm 9+ (only needed to build the Angular app)
-- Apache httpd with the following modules enabled in `httpd.conf`:
+- Node.js 18+ and npm (to build the Angular app)
+- Apache httpd with these modules enabled in `httpd.conf`:
 
   ```apache
   LoadModule rewrite_module      modules/mod_rewrite.so
@@ -76,77 +62,133 @@ SPA_Security_Test/
   LoadModule log_forensic_module modules/mod_log_forensic.so
   ```
 
-### Build the Angular app
-
-Apache serves the compiled static files, so build once before starting (and rebuild after any frontend change):
+### Steps
 
 ```bash
+# 1. Build the Angular app
 npm install --prefix frontend
 npm run build:frontend
+# Output: frontend/dist/frontend/browser/
+
+# 2. Point Apache at the config
+#    Add to httpd.conf:
+Include "E:/Storage/SPA_Security_Test/apache-many.conf"
+
+# 3. Restart Apache
+<ApachePath>/bin/httpd.exe
+
+# 4. Open http://localhost:4200
 ```
 
-Output lands in `frontend/dist/frontend/browser/`.
+### API Endpoints (Apache mode)
 
-### Configure Apache
+All endpoints except `/api/auth/login` require a `Bearer` token (not validated — static demo).
 
-Add to `httpd.conf`, replacing any existing `apache.conf` or `apache-many.conf` Include:
+| Method   | Path              | Port | Auth        |
+|----------|-------------------|------|-------------|
+| `POST`   | `/api/auth/login` | 3001 | —           |
+| `GET`    | `/api/profile`    | 3002 | JWT (unck.) |
+| `GET`    | `/api/users`      | 3003 | JWT (unck.) |
+| `GET`    | `/api/users/:id`  | 3003 | JWT (unck.) |
+| `DELETE` | `/api/users/:id`  | 3003 | JWT (unck.) |
+| `GET`    | `/api/items`      | 3004 | JWT (unck.) |
+| `GET`    | `/api/items/:id`  | 3004 | JWT (unck.) |
+| `POST`   | `/api/items`      | 3004 | JWT (unck.) |
+| `DELETE` | `/api/items/:id`  | 3004 | JWT (unck.) |
 
-```apache
-Include "<YourPathToProject>/apache-many.conf"
+### Apache logs
 
-Ex: Include "E:/Storage/SPA_Security_Test/apache-many.conf"
+Each VirtualHost writes to `E:/Apache24/logs/`:
+
+| VirtualHost | Forensic | Host-audit | Error | Access |
+|-------------|----------|------------|-------|--------|
+| Auth :3001  | `spa-security-auth-service-forensic.log` | `...-host-audit.log` | `...-error.log` | `...-access.log` |
+| Profile :3002 | `spa-security-profile-service-forensic.log` | … | … | … |
+| Users :3003   | `spa-security-users-service-forensic.log`   | … | … | … |
+| Items :3004   | `spa-security-items-service-forensic.log`   | … | … | … |
+
+---
+
+## Mode 2 — Docker + OAST (isolated local test)
+
+Runs the real Express backend, the Angular SPA (via nginx), and a custom OAST server — all in an isolated Docker network. No public domain or IP required.
+
+### What the OAST server does
+
+- **DNS** (port 53): resolves every `*.oast.local` query to its own IP and logs it.
+- **HTTP capture** (port 80): logs every inbound HTTP request (SSRF callbacks).
+- **Web UI** (port 8080): live interaction log that updates every 2 seconds.
+
+When the backend's DNS is pointed at the OAST server, any `*.oast.local` lookup triggered by an injected payload appears immediately in the log.
+
+### Network layout
+
+```
+oast-net  172.28.0.0/24
+├── oast-server   172.28.0.10  — fixed IP so DNS override can reference it
+├── webapp-backend              — Express :3000, DNS → 172.28.0.10
+└── webapp-frontend             — nginx :4200, proxies /api → webapp-backend
 ```
 
-Then restart Apache:
+### Prerequisites
+
+- Docker Desktop (or Docker Engine + Compose plugin)
+
+### Steps
+
+```bash
+cd oast
+docker compose up --build
+```
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:4200` | Angular SPA |
+| `http://localhost:8080` | OAST interaction log |
+
+### Triggering a DNS + HTTP interaction
+
+The backend exposes an intentionally vulnerable SSRF endpoint for testing:
 
 ```
-<YourApacheInstallPath>/bin ./http.exe
+GET /api/ssrf-test?url=<target>
 ```
 
-No backend process is needed — Apache serves everything.
+Use any `*.oast.local` payload to generate an interaction:
 
-Open `http://localhost:4200`.
+```bash
+curl "http://localhost:4200/api/ssrf-test?url=http://abc123.oast.local/callback"
+```
 
-## npm scripts
+Flow:
+1. Backend resolves `abc123.oast.local` → DNS query hits OAST server → **DNS entry logged**
+2. Backend makes HTTP `GET` to `http://172.28.0.10/callback` → **HTTP entry logged**
+3. Both interactions appear at `http://localhost:8080` within 2 seconds
 
-| Script | Description |
-|--------|-------------|
-| `npm run build:frontend` | Build the Angular app for Apache to serve |
+Any unique subdomain can be used as a correlation ID (`abc123`, `user-test`, `payload-1`, etc.).
 
-## API Endpoints
+### API Endpoints (Docker mode)
 
-All endpoints except `/api/auth/login` require a `Bearer` token in the `Authorization` header (token is not validated — static demo).
+JWT auth is fully enforced — tokens are cryptographically signed and validated.
 
-| Method   | Path              | Port | Auth        | Static fixture              |
-|----------|-------------------|------|-------------|----------------------------|
-| `POST`   | `/api/auth/login` | 3001 | —           | `auth/login.json`          |
-| `GET`    | `/api/profile`    | 3002 | JWT (unck.) | `profile.json`             |
-| `GET`    | `/api/users`      | 3003 | JWT (unck.) | `users.json`               |
-| `GET`    | `/api/users/:id`  | 3003 | JWT (unck.) | `users/:id.json`           |
-| `DELETE` | `/api/users/:id`  | 3003 | JWT (unck.) | 204 No Content             |
-| `GET`    | `/api/items`      | 3004 | JWT (unck.) | `items.json`               |
-| `GET`    | `/api/items/:id`  | 3004 | JWT (unck.) | `items/:id.json`           |
-| `POST`   | `/api/items`      | 3004 | JWT (unck.) | `items/created.json`       |
-| `DELETE` | `/api/items/:id`  | 3004 | JWT (unck.) | 204 No Content             |
+| Method   | Path                | Auth          |
+|----------|---------------------|---------------|
+| `POST`   | `/api/auth/login`   | —             |
+| `GET`    | `/api/profile`      | Bearer JWT    |
+| `GET`    | `/api/users`        | Bearer JWT    |
+| `GET`    | `/api/users/:id`    | Bearer JWT    |
+| `DELETE` | `/api/users/:id`    | JWT + admin   |
+| `GET`    | `/api/items`        | Bearer JWT    |
+| `GET`    | `/api/items/:id`    | Bearer JWT    |
+| `POST`   | `/api/items`        | Bearer JWT    |
+| `DELETE` | `/api/items/:id`    | JWT + admin   |
+| `GET`    | `/api/ssrf-test`    | — (test only) |
 
-JWT (unck.) — token is forwarded but not cryptographically validated (no backend process).
+---
 
 ## Demo Credentials
-
-Any username and password are accepted. The login endpoint always returns a fixed admin JWT and the admin user object.
 
 | Username | Password   | Role  |
 |----------|------------|-------|
 | `admin`  | `password` | admin |
 | `user`   | `password` | user  |
-
-## Logs
-
-Each VirtualHost writes to its own set of log files under `E:/Apache24/logs/`:
-
-| VirtualHost | Forensic log | Host-audit log | Error log | Access log |
-|-------------|-------------|----------------|-----------|------------|
-| Auth :3001  | `spa-security-auth-service-forensic.log` | `spa-security-auth-service-host-audit.log` | `spa-security-auth-service-error.log` | `spa-security-auth-service-access.log` |
-| Profile :3002 | `spa-security-profile-service-forensic.log` | `spa-security-profile-service-host-audit.log` | `spa-security-profile-service-error.log` | `spa-security-profile-service-access.log` |
-| Users :3003 | `spa-security-users-service-forensic.log` | `spa-security-users-service-host-audit.log` | `spa-security-users-service-error.log` | `spa-security-users-service-access.log` |
-| Items :3004 | `spa-security-items-service-forensic.log` | `spa-security-items-service-host-audit.log` | `spa-security-items-service-error.log` | `spa-security-items-service-access.log` |
