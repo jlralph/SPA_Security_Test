@@ -4,12 +4,8 @@ import jwt from 'jsonwebtoken';
 import { users, items, nextItemId } from './data';
 
 const app = express();
-const PORT = Number(process.env['PORT']) || 3000;
-const JWT_SECRET = (() => {
-  const s = process.env['JWT_SECRET'];
-  if (!s) throw new Error('JWT_SECRET environment variable is required');
-  return s;
-})();
+const PORT = 3000;
+const JWT_SECRET = 'spa-security-test-secret';
 
 app.use(cors({ origin: 'http://localhost:4200' }));
 app.use(express.json());
@@ -25,7 +21,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction): void {
     return;
   }
   try {
-    const payload = jwt.verify(header.slice(7), JWT_SECRET) as unknown as JwtPayload;
+    const payload = jwt.verify(header.slice(7), JWT_SECRET) as JwtPayload;
     (req as Request & { user: JwtPayload }).user = payload;
     next();
   } catch {
@@ -130,26 +126,6 @@ app.delete('/api/items/:id', requireAuth, requireAdmin, (req: Request, res: Resp
   if (idx === -1) { res.status(404).json({ message: 'Not found' }); return; }
   items.splice(idx, 1);
   res.status(204).send();
-});
-
-// ── GET /api/ssrf-test ────────────────────────────────────────────────────────
-// Intentionally vulnerable endpoint for local OAST testing.
-// Fetches a caller-supplied URL, triggering DNS + HTTP interactions on
-// the oast-server when a *.oast.local payload is used.
-
-app.get('/api/ssrf-test', async (req: Request, res: Response): Promise<void> => {
-  const url = req.query['url'] as string | undefined;
-  if (!url) {
-    res.status(400).json({ error: 'url query parameter required' });
-    return;
-  }
-  try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
-    const text = await response.text();
-    res.json({ status: response.status, body: text.slice(0, 500) });
-  } catch (err: unknown) {
-    res.json({ status: 'error', error: (err as Error).message });
-  }
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────

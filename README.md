@@ -1,6 +1,6 @@
 # SPA Security Test
 
-An Angular 19 single-page application intended as a testbed for SPA security research. Two runtime modes are available: a static Apache-only setup for fast traffic inspection, and a Docker-based setup with a real Express backend and an integrated OAST server for out-of-band testing.
+An Angular 19 single-page application served entirely by Apache httpd, intended as a testbed for SPA security research.
 
 > **Branch `apache-many`** — Apache serves both frontend and backend. No Node.js process is needed. Each API resource group has its own VirtualHost on a dedicated port, serving pre-baked JSON fixtures from `api-static/`. The Angular app calls each VirtualHost directly — nothing routes through port 4200.
 >
@@ -16,6 +16,8 @@ An Angular 19 single-page application intended as a testbed for SPA security res
 > `DELETE` and `POST /api/items` return correct status codes but do not mutate state.
 > All API responses are sent with `Cache-Control: no-store`.
 
+For the Docker + real Express backend + OAST DNS testing setup, see branch **`oast-express`**.
+
 ## Project Structure
 
 ```
@@ -30,29 +32,17 @@ SPA_Security_Test/
 │   ├── users/{1,2,3}.json    # GET  /api/users/:id
 │   ├── items.json            # GET  /api/items
 │   └── items/{1-4}.json      # GET  /api/items/:id
-├── backend/                  # Express 5 + TypeScript API (real backend)
+├── backend/                  # Express 5 + TypeScript API (reference only — not used here)
 │   └── src/server.ts
-├── frontend/                 # Angular 19 SPA
-│   ├── angular.json          # build configurations: production, development, apache
-│   └── src/
-│       └── environments/
-│           ├── environment.ts         # OAST / Docker — all APIs on :3000
-│           └── environment.apache.ts  # Apache static — split ports 3001-3004
-└── oast/                     # Docker-based isolated OAST test environment
-    ├── docker-compose.yml    # Runs all three services
-    ├── backend.Dockerfile
-    ├── frontend.Dockerfile
-    ├── nginx.conf
-    └── server/               # Custom DNS + HTTP interaction capture server
-        ├── index.js
-        └── package.json
+└── frontend/                 # Angular 19 SPA
+    ├── angular.json          # build configurations: production, development, apache
+    └── src/
+        └── environments/
+            ├── environment.ts         # default (dev server) — all APIs on :3000
+            └── environment.apache.ts  # Apache static — split ports 3001-3004
 ```
 
----
-
-## Mode 1 — Apache static (this branch)
-
-No real backend. Apache serves pre-baked JSON for all API calls.
+## How to Run
 
 ### Prerequisites
 
@@ -73,8 +63,7 @@ npm install --prefix frontend
 npm run build:frontend:apache
 # Output: frontend/dist/frontend/browser/
 
-# 2. Point Apache at the config
-#    Add to httpd.conf:
+# 2. Point Apache at the config — add to httpd.conf:
 Include "E:/Storage/SPA_Security_Test/apache-many.conf"
 
 # 3. Restart Apache
@@ -83,7 +72,14 @@ Include "E:/Storage/SPA_Security_Test/apache-many.conf"
 # 4. Open http://localhost:4200
 ```
 
-### API Endpoints (Apache mode)
+## Build Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run build:frontend:apache` | Build with the Apache environment (split ports 3001-3004) |
+| `npm run build:frontend` | Build with the default environment (all APIs on :3000) |
+
+## API Endpoints
 
 All endpoints except `/api/auth/login` require a `Bearer` token (not validated — static demo).
 
@@ -99,106 +95,7 @@ All endpoints except `/api/auth/login` require a `Bearer` token (not validated �
 | `POST`   | `/api/items`      | 3004 | JWT (unck.) |
 | `DELETE` | `/api/items/:id`  | 3004 | JWT (unck.) |
 
-### Apache logs
-
-Each VirtualHost writes to `E:/Apache24/logs/`:
-
-| VirtualHost | Forensic | Host-audit | Error | Access |
-|-------------|----------|------------|-------|--------|
-| Auth :3001  | `spa-security-auth-service-forensic.log` | `...-host-audit.log` | `...-error.log` | `...-access.log` |
-| Profile :3002 | `spa-security-profile-service-forensic.log` | … | … | … |
-| Users :3003   | `spa-security-users-service-forensic.log`   | … | … | … |
-| Items :3004   | `spa-security-items-service-forensic.log`   | … | … | … |
-
----
-
-### Build scripts (Apache mode)
-
-| Script | Description |
-|--------|-------------|
-| `npm run build:frontend:apache` | Build the Angular app with the Apache environment (split ports 3001-3004) |
-
----
-
-## Mode 2 — Docker + OAST (isolated local test)
-
-Runs the real Express backend, the Angular SPA (via nginx), and a custom OAST server — all in an isolated Docker network. No public domain or IP required.
-
-### What the OAST server does
-
-- **DNS** (port 53): resolves every `*.oast.local` query to its own IP and logs it.
-- **HTTP capture** (port 80): logs every inbound HTTP request (SSRF callbacks).
-- **Web UI** (port 8080): live interaction log that updates every 2 seconds.
-
-When the backend's DNS is pointed at the OAST server, any `*.oast.local` lookup triggered by an injected payload appears immediately in the log.
-
-### Network layout
-
-```
-oast-net  172.28.0.0/24
-├── oast-server   172.28.0.10  — fixed IP so DNS override can reference it
-├── webapp-backend              — Express :3000, DNS → 172.28.0.10
-└── webapp-frontend             — nginx :4200, proxies /api → webapp-backend
-```
-
-### Prerequisites
-
-- Docker Desktop (or Docker Engine + Compose plugin)
-
-### Steps
-
-```bash
-cd oast
-docker compose up --build
-```
-
-The frontend image runs `ng build` (default `production` configuration), which picks up `environment.ts` — all API calls route to the Express backend on `:3000`.
-
-| URL | Purpose |
-|-----|---------|
-| `http://localhost:3000` | Express API (direct) |
-| `http://localhost:4200` | Angular SPA (via nginx) |
-| `http://localhost:8080` | OAST interaction log |
-
-### Triggering a DNS + HTTP interaction
-
-The backend exposes an intentionally vulnerable SSRF endpoint for testing:
-
-```
-GET /api/ssrf-test?url=<target>
-```
-
-Use any `*.oast.local` payload to generate an interaction:
-
-```bash
-curl "http://localhost:4200/api/ssrf-test?url=http://abc123.oast.local/callback"
-```
-
-Flow:
-1. Backend resolves `abc123.oast.local` → DNS query hits OAST server → **DNS entry logged**
-2. Backend makes HTTP `GET` to `http://172.28.0.10/callback` → **HTTP entry logged**
-3. Both interactions appear at `http://localhost:8080` within 2 seconds
-
-Any unique subdomain can be used as a correlation ID (`abc123`, `user-test`, `payload-1`, etc.).
-
-### API Endpoints (Docker mode)
-
-JWT auth is fully enforced — tokens are cryptographically signed and validated.
-
-| Method   | Path                | Auth          |
-|----------|---------------------|---------------|
-| `POST`   | `/api/auth/login`   | —             |
-| `GET`    | `/api/profile`      | Bearer JWT    |
-| `GET`    | `/api/users`        | Bearer JWT    |
-| `GET`    | `/api/users/:id`    | Bearer JWT    |
-| `DELETE` | `/api/users/:id`    | JWT + admin   |
-| `GET`    | `/api/items`        | Bearer JWT    |
-| `GET`    | `/api/items/:id`    | Bearer JWT    |
-| `POST`   | `/api/items`        | Bearer JWT    |
-| `DELETE` | `/api/items/:id`    | JWT + admin   |
-| `GET`    | `/api/ssrf-test`    | — (test only) |
-
----
+JWT (unck.) — token is forwarded but not cryptographically validated (no backend process).
 
 ## Demo Credentials
 
@@ -206,3 +103,14 @@ JWT auth is fully enforced — tokens are cryptographically signed and validated
 |----------|------------|-------|
 | `admin`  | `password` | admin |
 | `user`   | `password` | user  |
+
+## Logs
+
+Each VirtualHost writes to `E:/Apache24/logs/`:
+
+| VirtualHost | Forensic log | Host-audit log | Error log | Access log |
+|-------------|-------------|----------------|-----------|------------|
+| Auth :3001  | `spa-security-auth-service-forensic.log` | `spa-security-auth-service-host-audit.log` | `spa-security-auth-service-error.log` | `spa-security-auth-service-access.log` |
+| Profile :3002 | `spa-security-profile-service-forensic.log` | `spa-security-profile-service-host-audit.log` | `spa-security-profile-service-error.log` | `spa-security-profile-service-access.log` |
+| Users :3003 | `spa-security-users-service-forensic.log` | `spa-security-users-service-host-audit.log` | `spa-security-users-service-error.log` | `spa-security-users-service-access.log` |
+| Items :3004 | `spa-security-items-service-forensic.log` | `spa-security-items-service-host-audit.log` | `spa-security-items-service-error.log` | `spa-security-items-service-access.log` |
