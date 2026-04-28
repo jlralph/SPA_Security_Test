@@ -1,59 +1,76 @@
 # Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.2.
+Angular 19 SPA — security research testbed. Standalone components, signals-based state, functional guards and interceptors.
+
+## Structure
+
+```
+src/
+├── app/
+│   ├── app.ts                        # Root component (bootstraps Router + HttpClient)
+│   ├── app.routes.ts                 # Route definitions
+│   ├── guards/
+│   │   └── auth.guard.ts             # authGuard — redirects to /login if unauthenticated
+│   ├── interceptors/
+│   │   └── auth.interceptor.ts       # authInterceptor — attaches Bearer token to all requests
+│   ├── models/
+│   │   ├── user.model.ts             # User, LoginRequest, LoginResponse
+│   │   └── item.model.ts             # Item
+│   ├── services/
+│   │   ├── auth.ts                   # AuthService — login/logout, JWT storage, signals
+│   │   └── api.ts                    # ApiService — users, items, profile HTTP calls
+│   └── pages/
+│       ├── home/home.ts              # Public home page; shows profile when logged in
+│       ├── login/login.ts            # Login form
+│       ├── users/users.ts            # User list + delete (authGuard)
+│       └── items/items.ts            # Item list + create + delete (authGuard)
+└── environments/
+    ├── environment.ts                # Local/Docker — all APIs on :3000
+    └── environment.apache.ts         # Apache static — split ports 3001–3004
+```
+
+## Routes
+
+| Path | Component | Guard |
+|------|-----------|-------|
+| `/` | — | — | Redirects to `/home` |
+| `/home` | `HomeComponent` | — |
+| `/login` | `LoginComponent` | — |
+| `/users` | `UsersComponent` | `authGuard` |
+| `/items` | `ItemsComponent` | `authGuard` |
+| `**` | — | — | Redirects to `/home` |
 
 ## Development server
 
-To start a local development server, run:
-
 ```bash
-ng serve
+npm start          # ng serve — dev server on :4200, proxies /api → :3000
+npm run watch      # ng build --watch --configuration development
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
-
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+Requires the Express backend running on `:3000`. Start it from the repo root:
 
 ```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
+npm run dev:backend
 ```
 
 ## Building
 
-To build the project run:
-
 ```bash
-ng build
+npm run build                        # Production build → dist/frontend/browser/
+npm run build -- --configuration apache   # Apache static build (splits API ports 3001–3004)
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
+Or via root scripts:
 
 ```bash
-ng test
+npm run build:frontend               # Production
+npm run build:frontend:apache        # Apache
 ```
 
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
+## Tests
 
 ```bash
-ng e2e
+npm test           # Vitest via ng test
 ```
 
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+No e2e framework is configured.

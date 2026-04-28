@@ -1,43 +1,31 @@
 # SPA Security Test
 
-An Angular 19 single-page application intended as a testbed for SPA security research. Two runtime modes are available: a static Apache-only setup for fast traffic inspection, and a Docker-based setup with a real Express backend and an integrated OAST server for out-of-band testing.
-
-> **Branch `apache-many`** — Apache serves both frontend and backend. No Node.js process is needed. Each API resource group has its own VirtualHost on a dedicated port, serving pre-baked JSON fixtures from `api-static/`. The Angular app calls each VirtualHost directly — nothing routes through port 4200.
->
-> | Port | VirtualHost | Serves |
-> |------|-------------|--------|
-> | 4200 | Frontend    | Angular SPA static files |
-> | 3001 | Auth        | `POST /api/auth/login` → `api-static/auth/login.json` |
-> | 3002 | Profile     | `GET /api/profile` → `api-static/profile.json` |
-> | 3003 | Users       | `GET/DELETE /api/users/*` → `api-static/users/*.json` |
-> | 3004 | Items       | `GET/POST/DELETE /api/items/*` → `api-static/items/*.json` |
->
-> Login always succeeds and returns a fixed admin JWT — any credentials are accepted (static demo).
-> `DELETE` and `POST /api/items` return correct status codes but do not mutate state.
-> All API responses are sent with `Cache-Control: no-store`.
+An Angular 19 single-page application intended as a testbed for SPA security research. This branch (`oast-express`) runs a real Express 5 backend with full JWT authentication and includes a Docker-based OAST server for out-of-band interaction testing.
 
 ## Project Structure
 
 ```
 SPA_Security_Test/
 ├── package.json              # Root scripts
-├── apache-many.conf          # Apache config — one VirtualHost per API resource group
 ├── README.md
-├── api-static/               # JSON fixtures served by the API VirtualHosts
-│   ├── auth/login.json       # POST /api/auth/login  (fixed admin response)
-│   ├── profile.json          # GET  /api/profile
-│   ├── users.json            # GET  /api/users
-│   ├── users/{1,2,3}.json    # GET  /api/users/:id
-│   ├── items.json            # GET  /api/items
-│   └── items/{1-4}.json      # GET  /api/items/:id
-├── backend/                  # Express 5 + TypeScript API (real backend)
-│   └── src/server.ts
-├── frontend/                 # Angular 19 SPA
-│   ├── angular.json          # build configurations: production, development, apache
+├── backend/                  # Express 5 + TypeScript API
+│   ├── package.json
 │   └── src/
-│       └── environments/
-│           ├── environment.ts         # OAST / Docker — all APIs on :3000
-│           └── environment.apache.ts  # Apache static — split ports 3001-3004
+│       ├── server.ts         # Entry point, routes, middleware
+│       └── data.ts           # In-memory users and items
+├── frontend/                 # Angular 19 SPA
+│   ├── angular.json          # Build configurations: production, development, apache
+│   ├── proxy.conf.json       # Dev proxy: /api → :3000
+│   └── src/
+│       ├── environments/
+│       │   ├── environment.ts         # Docker/local — all APIs on :3000
+│       │   └── environment.apache.ts  # Apache static — split ports 3001–3004
+│       └── app/
+│           ├── guards/auth.guard.ts
+│           ├── interceptors/auth.interceptor.ts
+│           ├── services/{auth,api}.ts
+│           ├── models/{user,item}.model.ts
+│           └── pages/{login,home,users,items}/
 └── oast/                     # Docker-based isolated OAST test environment
     ├── docker-compose.yml    # Runs all three services
     ├── backend.Dockerfile
@@ -50,73 +38,60 @@ SPA_Security_Test/
 
 ---
 
-## Mode 1 — Apache static (this branch)
+## Mode 1 — Local development
 
-No real backend. Apache serves pre-baked JSON for all API calls.
+Runs the Express backend directly with the Angular CLI dev server.
 
 ### Prerequisites
 
-- Node.js 18+ and npm (to build the Angular app)
-- Apache httpd with these modules enabled in `httpd.conf`:
-
-  ```apache
-  LoadModule rewrite_module      modules/mod_rewrite.so
-  LoadModule headers_module      modules/mod_headers.so
-  LoadModule log_forensic_module modules/mod_log_forensic.so
-  ```
+- Node.js 18+ and npm
 
 ### Steps
 
 ```bash
-# 1. Build the Angular app with the Apache environment
+# Install dependencies
+npm install --prefix backend
 npm install --prefix frontend
-npm run build:frontend:apache
-# Output: frontend/dist/frontend/browser/
 
-# 2. Point Apache at the config
-#    Add to httpd.conf:
-Include "E:/Storage/SPA_Security_Test/apache-many.conf"
+# Terminal 1 — Express backend on :3000
+npm run dev:backend
 
-# 3. Restart Apache
-<ApachePath>/bin/httpd.exe
-
-# 4. Open http://localhost:4200
+# Terminal 2 — Angular dev server on :4200 (proxies /api → :3000)
+cd frontend && npm start
 ```
 
-### API Endpoints (Apache mode)
-
-All endpoints except `/api/auth/login` require a `Bearer` token (not validated — static demo).
-
-| Method   | Path              | Port | Auth        |
-|----------|-------------------|------|-------------|
-| `POST`   | `/api/auth/login` | 3001 | —           |
-| `GET`    | `/api/profile`    | 3002 | JWT (unck.) |
-| `GET`    | `/api/users`      | 3003 | JWT (unck.) |
-| `GET`    | `/api/users/:id`  | 3003 | JWT (unck.) |
-| `DELETE` | `/api/users/:id`  | 3003 | JWT (unck.) |
-| `GET`    | `/api/items`      | 3004 | JWT (unck.) |
-| `GET`    | `/api/items/:id`  | 3004 | JWT (unck.) |
-| `POST`   | `/api/items`      | 3004 | JWT (unck.) |
-| `DELETE` | `/api/items/:id`  | 3004 | JWT (unck.) |
-
-### Apache logs
-
-Each VirtualHost writes to `E:/Apache24/logs/`:
-
-| VirtualHost | Forensic | Host-audit | Error | Access |
-|-------------|----------|------------|-------|--------|
-| Auth :3001  | `spa-security-auth-service-forensic.log` | `...-host-audit.log` | `...-error.log` | `...-access.log` |
-| Profile :3002 | `spa-security-profile-service-forensic.log` | … | … | … |
-| Users :3003   | `spa-security-users-service-forensic.log`   | … | … | … |
-| Items :3004   | `spa-security-items-service-forensic.log`   | … | … | … |
-
----
-
-### Build scripts (Apache mode)
+### Root scripts
 
 | Script | Description |
 |--------|-------------|
-| `npm run build:frontend:apache` | Build the Angular app with the Apache environment (split ports 3001-3004) |
+| `npm run dev` | Start Express backend on :3000 |
+| `npm run dev:backend` | Same as above |
+| `npm run build:frontend` | Production build of Angular app |
+| `npm run build:frontend:apache` | Build Angular app with Apache environment (split ports 3001–3004) |
+
+### API Endpoints
+
+JWT auth is fully enforced — tokens are cryptographically signed and validated.
+
+| Method | Path | Auth |
+|--------|------|------|
+| `POST` | `/api/auth/login` | — |
+| `GET` | `/api/profile` | Bearer JWT |
+| `GET` | `/api/users` | Bearer JWT |
+| `GET` | `/api/users/:id` | Bearer JWT |
+| `DELETE` | `/api/users/:id` | JWT + admin |
+| `GET` | `/api/items` | Bearer JWT |
+| `GET` | `/api/items/:id` | Bearer JWT |
+| `POST` | `/api/items` | Bearer JWT |
+| `DELETE` | `/api/items/:id` | JWT + admin |
+| `GET` | `/api/ssrf-test` | — (test only) |
+
+### Backend environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `3000` | Express listen port |
+| `JWT_SECRET` | *(required)* | JWT signing secret — process exits if missing |
 
 ---
 
@@ -181,28 +156,11 @@ Flow:
 
 Any unique subdomain can be used as a correlation ID (`abc123`, `user-test`, `payload-1`, etc.).
 
-### API Endpoints (Docker mode)
-
-JWT auth is fully enforced — tokens are cryptographically signed and validated.
-
-| Method   | Path                | Auth          |
-|----------|---------------------|---------------|
-| `POST`   | `/api/auth/login`   | —             |
-| `GET`    | `/api/profile`      | Bearer JWT    |
-| `GET`    | `/api/users`        | Bearer JWT    |
-| `GET`    | `/api/users/:id`    | Bearer JWT    |
-| `DELETE` | `/api/users/:id`    | JWT + admin   |
-| `GET`    | `/api/items`        | Bearer JWT    |
-| `GET`    | `/api/items/:id`    | Bearer JWT    |
-| `POST`   | `/api/items`        | Bearer JWT    |
-| `DELETE` | `/api/items/:id`    | JWT + admin   |
-| `GET`    | `/api/ssrf-test`    | — (test only) |
-
 ---
 
 ## Demo Credentials
 
-| Username | Password   | Role  |
-|----------|------------|-------|
-| `admin`  | `password` | admin |
-| `user`   | `password` | user  |
+| Username | Password | Role |
+|----------|----------|------|
+| `admin` | `password` | admin |
+| `user` | `password` | user |
