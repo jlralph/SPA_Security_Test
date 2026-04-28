@@ -3,7 +3,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.28.0.0/24
+        - subnet: 172.30.0.0/24
 
 services:
   # OAST interaction server
@@ -14,14 +14,14 @@ services:
     container_name: oast-server
     restart: unless-stopped
     environment:
-      OAST_IP: "172.28.0.10"
+      OAST_IP: "172.30.0.10"
       OAST_DOMAIN: "oast.local"
       UPSTREAM_DNS: "8.8.8.8"
     ports:
       - "8080:8080"   # Web UI
     networks:
       oast-net:
-        ipv4_address: 172.28.0.10
+        ipv4_address: 172.30.0.10
 
   # Express backend
   webapp-backend:
@@ -38,7 +38,7 @@ services:
     ports:
       - "3000:3000"
     dns:
-      - 172.28.0.10
+      - 172.30.0.10
     networks:
       - oast-net
 
