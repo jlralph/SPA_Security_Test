@@ -2,13 +2,9 @@
   "name": "spa-security-test",
   "private": true,
   "scripts": {
-    "dev": "npm run dev:backend",
-    "dev:backend": "npm run dev --prefix backend",
-    "build:frontend": "npm run build --prefix frontend",
-    "build:frontend:apache": "npm run build --prefix frontend -- --configuration apache",
-    "dev:frontend": "echo \"Frontend is served by Apache. Build with 'npm run build:frontend' then start Apache — see apache.conf.\""
-  },
-  "devDependencies": {
-    "concurrently": "^9.2.1"
+    "start": "docker compose up --build",
+    "up": "docker compose up",
+    "stop": "docker compose down",
+    "build": "docker compose build"
   }
 }

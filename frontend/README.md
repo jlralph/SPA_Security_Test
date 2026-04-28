@@ -25,8 +25,7 @@ src/
 │       ├── users/users.ts            # User list + delete (authGuard)
 │       └── items/items.ts            # Item list + create + delete (authGuard)
 └── environments/
-    ├── environment.ts                # Local/Docker — all APIs on :3000
-    └── environment.apache.ts         # Apache static — split ports 3001–3004
+    └── environment.ts                # API config — all APIs on :3000
 ```
 
 ## Routes
@@ -57,14 +56,12 @@ npm run dev:backend
 
 ```bash
 npm run build                        # Production build → dist/frontend/browser/
-npm run build -- --configuration apache   # Apache static build (splits API ports 3001–3004)
 ```
 
 Or via root scripts:
 
 ```bash
-npm run build:frontend               # Production
-npm run build:frontend:apache        # Apache
+npm run build:frontend               # Production build
 ```
 
 ## Tests

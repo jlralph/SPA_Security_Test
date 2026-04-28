@@ -1,0 +1,57 @@
+networks:
+  oast-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+services:
+  # OAST interaction server
+  oast-server:
+    build:
+      context: ./oast/server
+      dockerfile: Dockerfile
+    container_name: oast-server
+    restart: unless-stopped
+    environment:
+      OAST_IP: "172.28.0.10"
+      OAST_DOMAIN: "oast.local"
+      UPSTREAM_DNS: "8.8.8.8"
+    ports:
+      - "8080:8080"   # Web UI
+    networks:
+      oast-net:
+        ipv4_address: 172.28.0.10
+
+  # Express backend
+  webapp-backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: webapp-backend
+    restart: unless-stopped
+    depends_on:
+      - oast-server
+    environment:
+      PORT: "3000"
+      JWT_SECRET: "oast-local-test-secret-change-me"
+    ports:
+      - "3000:3000"
+    dns:
+      - 172.28.0.10
+    networks:
+      - oast-net
+
+  # Angular frontend (nginx)
+  webapp-frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    container_name: webapp-frontend
+    restart: unless-stopped
+    depends_on:
+      - webapp-backend
+    ports:
+      - "4200:4200"
+    networks:
+      - oast-net

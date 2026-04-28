@@ -1,36 +1,33 @@
 # SPA Security Test
 
-An Angular 19 single-page application intended as a testbed for SPA security research. This branch (`oast-express`) runs a real Express 5 backend with full JWT authentication and includes a Docker-based OAST server for out-of-band interaction testing.
+An Angular SPA intended as a testbed for SPA security research. This branch (`oast-express`) runs a real Express 5 backend with full JWT authentication and includes a Docker-based OAST server for out-of-band interaction testing.
 
 ## Project Structure
 
 ```
 SPA_Security_Test/
-├── package.json              # Root scripts
-├── README.md
+├── docker-compose.yml        # Orchestrates all three services
+├── backend.Dockerfile
+├── frontend.Dockerfile
+├── nginx.conf                # nginx config for the frontend container
+├── .env.example              # Network layout reference
 ├── backend/                  # Express 5 + TypeScript API
 │   ├── package.json
 │   └── src/
 │       ├── server.ts         # Entry point, routes, middleware
 │       └── data.ts           # In-memory users and items
-├── frontend/                 # Angular 19 SPA
-│   ├── angular.json          # Build configurations: production, development, apache
-│   ├── proxy.conf.json       # Dev proxy: /api → :3000
+├── frontend/                 # Angular SPA
+│   ├── angular.json
 │   └── src/
 │       ├── environments/
-│       │   ├── environment.ts         # Docker/local — all APIs on :3000
-│       │   └── environment.apache.ts  # Apache static — split ports 3001–3004
+│       │   └── environment.ts
 │       └── app/
 │           ├── guards/auth.guard.ts
 │           ├── interceptors/auth.interceptor.ts
 │           ├── services/{auth,api}.ts
 │           ├── models/{user,item}.model.ts
 │           └── pages/{login,home,users,items}/
-└── oast/                     # Docker-based isolated OAST test environment
-    ├── docker-compose.yml    # Runs all three services
-    ├── backend.Dockerfile
-    ├── frontend.Dockerfile
-    ├── nginx.conf
+└── oast/
     └── server/               # Custom DNS + HTTP interaction capture server
         ├── index.js
         └── package.json
@@ -38,38 +35,59 @@ SPA_Security_Test/
 
 ---
 
-## Mode 1 — Local development
+## Running the app
 
-Runs the Express backend directly with the Angular CLI dev server.
+Everything runs in Docker. No local Node.js installation required.
 
 ### Prerequisites
 
-- Node.js 18+ and npm
+- Docker Desktop (or Docker Engine + Compose plugin)
 
-### Steps
+### Start
 
 ```bash
-# Install dependencies
-npm install --prefix backend
-npm install --prefix frontend
-
-# Terminal 1 — Express backend on :3000
-npm run dev:backend
-
-# Terminal 2 — Angular dev server on :4200 (proxies /api → :3000)
-cd frontend && npm start
+docker compose up --build
 ```
 
-### Root scripts
+Or use the npm script shorthand (requires Node.js only for the script runner):
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start Express backend on :3000 |
-| `npm run dev:backend` | Same as above |
-| `npm run build:frontend` | Production build of Angular app |
-| `npm run build:frontend:apache` | Build Angular app with Apache environment (split ports 3001–3004) |
+```bash
+npm start       # docker compose up --build
+npm run up      # docker compose up (skip rebuild)
+npm run stop    # docker compose down
+npm run build   # docker compose build
+```
 
-### API Endpoints
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:4200` | Angular SPA (via nginx) |
+| `http://localhost:3000` | Express API (direct) |
+| `http://localhost:8080` | OAST interaction log |
+
+---
+
+## Network layout
+
+```
+oast-net  172.28.0.0/24
+├── oast-server   172.28.0.10  — fixed IP so DNS override can reference it
+├── webapp-backend              — Express :3000, DNS → 172.28.0.10
+└── webapp-frontend             — nginx :4200, proxies /api → webapp-backend
+```
+
+The backend's DNS is pointed at the OAST server. Any `*.oast.local` lookup triggered by an injected payload appears immediately in the interaction log at `http://localhost:8080`.
+
+---
+
+## What the OAST server does
+
+- **DNS** (port 53): resolves every `*.oast.local` query to its own IP and logs it.
+- **HTTP capture** (port 80): logs every inbound HTTP request (SSRF callbacks).
+- **Web UI** (port 8080): live interaction log that updates every 2 seconds.
+
+---
+
+## API endpoints
 
 JWT auth is fully enforced — tokens are cryptographically signed and validated.
 
@@ -95,47 +113,7 @@ JWT auth is fully enforced — tokens are cryptographically signed and validated
 
 ---
 
-## Mode 2 — Docker + OAST (isolated local test)
-
-Runs the real Express backend, the Angular SPA (via nginx), and a custom OAST server — all in an isolated Docker network. No public domain or IP required.
-
-### What the OAST server does
-
-- **DNS** (port 53): resolves every `*.oast.local` query to its own IP and logs it.
-- **HTTP capture** (port 80): logs every inbound HTTP request (SSRF callbacks).
-- **Web UI** (port 8080): live interaction log that updates every 2 seconds.
-
-When the backend's DNS is pointed at the OAST server, any `*.oast.local` lookup triggered by an injected payload appears immediately in the log.
-
-### Network layout
-
-```
-oast-net  172.28.0.0/24
-├── oast-server   172.28.0.10  — fixed IP so DNS override can reference it
-├── webapp-backend              — Express :3000, DNS → 172.28.0.10
-└── webapp-frontend             — nginx :4200, proxies /api → webapp-backend
-```
-
-### Prerequisites
-
-- Docker Desktop (or Docker Engine + Compose plugin)
-
-### Steps
-
-```bash
-cd oast
-docker compose up --build
-```
-
-The frontend image runs `ng build` (default `production` configuration), which picks up `environment.ts` — all API calls route to the Express backend on `:3000`.
-
-| URL | Purpose |
-|-----|---------|
-| `http://localhost:3000` | Express API (direct) |
-| `http://localhost:4200` | Angular SPA (via nginx) |
-| `http://localhost:8080` | OAST interaction log |
-
-### Triggering a DNS + HTTP interaction
+## Triggering a DNS + HTTP interaction
 
 The backend exposes an intentionally vulnerable SSRF endpoint for testing:
 
