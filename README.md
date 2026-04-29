@@ -79,7 +79,9 @@ npm run build   # docker compose build
 |-----|---------|
 | `http://localhost:4200` | Angular SPA (via nginx) |
 | `http://localhost:3000` | Express API (direct) |
-| `http://localhost:8080` | OAST interaction log |
+| `http://localhost:8080` | mitmproxy proxy listener (point browser/tools here) |
+| `http://localhost:8081` | mitmweb UI (intercepted backend traffic) |
+| `http://localhost:8082` | OAST interaction log |
 
 ---
 
@@ -88,11 +90,14 @@ npm run build   # docker compose build
 ```
 oast-net  172.30.0.0/24
 ├── oast-server   172.30.0.10  — fixed IP so DNS override can reference it
-├── webapp-backend              — Express :3000, DNS → 172.30.0.10
+├── mitmproxy                  — intercepting proxy :8080 (host), web UI :8081
+├── webapp-backend              — Express :3000, DNS → 172.30.0.10, HTTP(S) → mitmproxy:8080
 └── webapp-frontend             — nginx :4200, proxies /api → webapp-backend
 ```
 
-The backend's DNS is pointed at the OAST server. Any `*.oast.local` lookup triggered by an injected payload appears immediately in the interaction log at `http://localhost:8080`.
+The backend's DNS is pointed at the OAST server. Any `*.oast.local` lookup triggered by an injected payload appears immediately in the interaction log at `http://localhost:8082`.
+
+All outbound HTTP/HTTPS from the backend is routed through mitmproxy — every request the backend makes (including SSRF callbacks) appears in the mitmweb UI at `http://localhost:8081`.
 
 ---
 
@@ -100,7 +105,7 @@ The backend's DNS is pointed at the OAST server. Any `*.oast.local` lookup trigg
 
 - **DNS** (port 53): resolves every `*.oast.local` query to its own IP and logs it.
 - **HTTP capture** (port 80): logs every inbound HTTP request (SSRF callbacks).
-- **Web UI** (port 8080): live interaction log that updates every 2 seconds.
+- **Web UI** (port 8080 internal / 8082 on host): live interaction log that updates every 2 seconds.
 
 ---
 
@@ -147,7 +152,7 @@ curl "http://localhost:4200/api/ssrf-test?url=http://abc123.oast.local/callback"
 Flow:
 1. Backend resolves `abc123.oast.local` → DNS query hits OAST server → **DNS entry logged**
 2. Backend makes HTTP `GET` to `http://172.30.0.10/callback` → **HTTP entry logged**
-3. Both interactions appear at `http://localhost:8080` within 2 seconds
+3. Both interactions appear at `http://localhost:8082` within 2 seconds
 
 Any unique subdomain can be used as a correlation ID (`abc123`, `user-test`, `payload-1`, etc.).
 

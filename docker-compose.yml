@@ -18,10 +18,24 @@ services:
       OAST_DOMAIN: "oast.local"
       UPSTREAM_DNS: "8.8.8.8"
     ports:
-      - "8080:8080"   # Web UI
+      - "8082:8080"   # Web UI
     networks:
       oast-net:
         ipv4_address: 172.30.0.10
+
+  # Intercepting proxy (mitmweb UI at :8081, proxy at :8080)
+  mitmproxy:
+    image: mitmproxy/mitmproxy
+    container_name: mitmproxy
+    command: mitmweb --web-host 0.0.0.0
+    restart: unless-stopped
+    ports:
+      - "8080:8080"   # proxy listener
+      - "8081:8081"   # mitmweb UI
+    networks:
+      - oast-net
+    environment:
+      - PYTHONUNBUFFERED=1
 
   # Express backend
   webapp-backend:
@@ -32,9 +46,13 @@ services:
     restart: unless-stopped
     depends_on:
       - oast-server
+      - mitmproxy
     environment:
       PORT: "3000"
       JWT_SECRET: "oast-local-test-secret-change-me"
+      HTTP_PROXY: "http://mitmproxy:8080"
+      HTTPS_PROXY: "http://mitmproxy:8080"
+    #  NO_PROXY: "localhost,127.0.0.1"
     ports:
       - "3000:3000"
     dns:
@@ -51,6 +69,11 @@ services:
     restart: unless-stopped
     depends_on:
       - webapp-backend
+      - mitmproxy
+    environment:
+      PORT: "4200"
+      HTTP_PROXY: "http://mitmproxy:8080"
+      HTTPS_PROXY: "http://mitmproxy:8080"
     ports:
       - "4200:4200"
     networks:
