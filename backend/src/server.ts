@@ -1,7 +1,12 @@
+import { setGlobalDispatcher, ProxyAgent } from 'undici';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import jwt from 'jsonwebtoken';
 import { users, items, nextItemId } from './data';
+
+if (process.env['HTTP_PROXY']) {
+  setGlobalDispatcher(new ProxyAgent(process.env['HTTP_PROXY']));
+}
 
 const app = express();
 const PORT = Number(process.env['PORT']) || 3000;

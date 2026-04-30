@@ -32,6 +32,9 @@ SPA_Security_Test/
 │           ├── services/{auth,api}.ts
 │           ├── models/{user,item}.model.ts
 │           └── pages/{login,home,users,items}/
+├── proxy/                    # Logging HTTP proxy
+│   ├── Dockerfile
+│   └── index.js
 └── oast/
     └── server/               # Custom DNS + HTTP interaction capture server
         ├── Dockerfile
@@ -48,6 +51,7 @@ SPA_Security_Test/
 | Frontend | Angular 21, TypeScript 5.9, RxJS 7.8, Vitest |
 | Backend | Express 5, TypeScript 5.9, jsonwebtoken 9 |
 | OAST server | Node 20, dns2 |
+| Logging proxy | Node 20, zero dependencies |
 | Container | Docker Compose, nginx, Node 20 Alpine |
 
 ---
@@ -79,9 +83,14 @@ npm run build   # docker compose build
 |-----|---------|
 | `http://localhost:4200` | Angular SPA (via nginx) |
 | `http://localhost:3000` | Express API (direct) |
-| `http://localhost:8080` | mitmproxy proxy listener (point browser/tools here) |
-| `http://localhost:8081` | mitmweb UI (intercepted backend traffic) |
+| `http://localhost:8080` | Logging proxy (point browser/tools here) |
 | `http://localhost:8082` | OAST interaction log |
+
+Proxy traffic is logged to stdout — view it with:
+
+```bash
+docker compose logs -f proxy
+```
 
 ---
 
@@ -90,14 +99,14 @@ npm run build   # docker compose build
 ```
 oast-net  172.30.0.0/24
 ├── oast-server   172.30.0.10  — fixed IP so DNS override can reference it
-├── mitmproxy                  — intercepting proxy :8080 (host), web UI :8081
-├── webapp-backend              — Express :3000, DNS → 172.30.0.10, HTTP(S) → mitmproxy:8080
+├── proxy                      — logging proxy :8080
+├── webapp-backend              — Express :3000, DNS → 172.30.0.10, HTTP(S) → proxy:8080
 └── webapp-frontend             — nginx :4200, proxies /api → webapp-backend
 ```
 
 The backend's DNS is pointed at the OAST server. Any `*.oast.local` lookup triggered by an injected payload appears immediately in the interaction log at `http://localhost:8082`.
 
-All outbound HTTP/HTTPS from the backend is routed through mitmproxy — every request the backend makes (including SSRF callbacks) appears in the mitmweb UI at `http://localhost:8081`.
+All outbound HTTP/HTTPS from the backend and frontend is routed through the logging proxy. HTTP requests (method, URL, body) are logged to stdout; HTTPS tunnels log the destination hostname via CONNECT. View with `docker compose logs -f proxy`.
 
 ---
 

@@ -23,19 +23,19 @@ services:
       oast-net:
         ipv4_address: 172.30.0.10
 
-  # Intercepting proxy (mitmweb UI at :8081, proxy at :8080)
-  mitmproxy:
-    image: mitmproxy/mitmproxy
-    container_name: mitmproxy
-    command: mitmweb --web-host 0.0.0.0
+  # Logging proxy — HTTP traffic logged to stdout (docker compose logs -f proxy)
+  proxy:
+    build:
+      context: ./proxy
+      dockerfile: Dockerfile
+    container_name: proxy
     restart: unless-stopped
     ports:
-      - "8080:8080"   # proxy listener
-      - "8081:8081"   # mitmweb UI
+      - "8080:8080"
+    dns:
+      - 172.30.0.10
     networks:
       - oast-net
-    environment:
-      - PYTHONUNBUFFERED=1
 
   # Express backend
   webapp-backend:
@@ -46,12 +46,12 @@ services:
     restart: unless-stopped
     depends_on:
       - oast-server
-      - mitmproxy
+      - proxy
     environment:
       PORT: "3000"
       JWT_SECRET: "oast-local-test-secret-change-me"
-      HTTP_PROXY: "http://mitmproxy:8080"
-      HTTPS_PROXY: "http://mitmproxy:8080"
+      HTTP_PROXY: "http://proxy:8080"
+      HTTPS_PROXY: "http://proxy:8080"
     #  NO_PROXY: "localhost,127.0.0.1"
     ports:
       - "3000:3000"
@@ -69,11 +69,11 @@ services:
     restart: unless-stopped
     depends_on:
       - webapp-backend
-      - mitmproxy
+      - proxy
     environment:
       PORT: "4200"
-      HTTP_PROXY: "http://mitmproxy:8080"
-      HTTPS_PROXY: "http://mitmproxy:8080"
+      HTTP_PROXY: "http://proxy:8080"
+      HTTPS_PROXY: "http://proxy:8080"
     ports:
       - "4200:4200"
     networks:
