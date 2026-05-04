@@ -60,6 +60,40 @@ services:
     networks:
       - oast-net
 
+  # OWASP ZAP — daemon mode
+  # UI:  http://localhost:8090/UI/
+  #
+  # CLI scans — run as a one-off container (scan scripts manage their own ZAP lifecycle):
+  #   docker compose run --rm zap zap-baseline.py -t http://webapp-frontend:4200 -r baseline.html
+  #   docker compose run --rm zap zap-full-scan.py  -t http://webapp-frontend:4200 -r full.html
+  #   docker compose run --rm zap zap-api-scan.py   -t http://webapp-backend:3000/openapi.json -f openapi -r api.html
+  # Reports land in ./reports/ on the host.
+  #
+  # Daemon-based scanning (no extra container) via the REST API:
+  #   curl "http://localhost:8090/JSON/spider/action/scan/?url=http://webapp-frontend:4200"
+  #   curl "http://localhost:8090/JSON/ascan/action/scan/?url=http://webapp-frontend:4200&recurse=true"
+  #   curl "http://localhost:8090/OTHER/core/other/htmlreport/" > reports/zap-report.html
+  zap:
+    image: ghcr.io/zaproxy/zaproxy:stable
+    container_name: zap
+    user: zap
+    command: >
+      zap.sh -daemon
+      -host 0.0.0.0
+      -port 8090
+      -config api.addrs.addr.name=.*
+      -config api.addrs.addr.regex=true
+      -config api.disablekey=true
+    restart: unless-stopped
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./reports:/zap/wrk:rw
+    dns:
+      - 172.30.0.10
+    networks:
+      - oast-net
+
   # Angular frontend (nginx)
   webapp-frontend:
     build:
@@ -78,3 +112,4 @@ services:
       - "4200:4200"
     networks:
       - oast-net
+
