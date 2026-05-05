@@ -1,10 +1,31 @@
 env:
   contexts:
-  - excludePaths: []
-    name: baseline
+  - name: baseline
     urls:
-    - http://spa_security_test-webapp-frontend:4200/home
-    - http://spa_security_test-webapp-frontend:4200/
+    - http://webapp-frontend:4200
+    excludePaths: []
+    authentication:
+      method: json
+      parameters:
+        loginPageUrl: http://webapp-frontend:4200/api/auth/login
+        loginRequestData: '{"username":"{%username%}","password":"{%password%}"}'
+      verification:
+        method: response
+        loggedInRegex: '"token":'
+        loggedOutRegex: '"message"'
+    sessionManagement:
+      method: headers
+      parameters:
+        headers: "Authorization: Bearer {%json:token%}"
+    users:
+    - name: admin
+      credentials:
+        username: admin
+        password: password
+    - name: user
+      credentials:
+        username: user
+        password: password
   parameters:
     failOnError: true
     progressToStdout: false
@@ -14,14 +35,29 @@ jobs:
     maxAlertsPerRule: 10
   type: passiveScan-config
 - parameters:
-    maxDuration: 1
-    url: http://spa_security_test-webapp-frontend:4200/
+    context: baseline
+    user: admin
+    maxDuration: 2
+    url: http://webapp-frontend:4200
   type: spider
 - parameters:
     maxDuration: 0
   type: passiveScan-wait
 - parameters:
+    context: baseline
+    user: admin
+    maxDuration: 0
+    recurse: true
+  type: activeScan
+- parameters:
     format: Long
-    summaryFile: /home/zap/zap_out.json
+    summaryFile: /zap/wrk/zap_out.json
   rules: []
   type: outputSummary
+- parameters:
+    reportDescription: ''
+    reportDir: /zap/wrk/
+    reportFile: full.html
+    reportTitle: ZAP Full Scan Report
+    template: traditional-html
+  type: report

@@ -6,11 +6,13 @@ An Angular SPA intended as a testbed for SPA security research. This branch (`oa
 
 ```
 SPA_Security_Test/
-├── docker-compose.yml        # Orchestrates all three services
+├── docker-compose.yml        # Orchestrates all services
 ├── backend.Dockerfile
 ├── frontend.Dockerfile
 ├── nginx.conf                # nginx config for the frontend container
+├── zap.yaml                  # ZAP Automation Framework plan (passive scan)
 ├── .env.example              # Network layout reference
+├── reports/                  # ZAP HTML reports (mounted into zap container)
 ├── backend/                  # Express 5 + TypeScript API
 │   ├── package.json
 │   └── src/
@@ -52,6 +54,7 @@ SPA_Security_Test/
 | Backend | Express 5, TypeScript 5.9, jsonwebtoken 9 |
 | OAST server | Node 20, dns2 |
 | Logging proxy | Node 20, zero dependencies |
+| Scanner | OWASP ZAP stable (daemon + CLI scan scripts) |
 | Container | Docker Compose, nginx, Node 20 Alpine |
 
 ---
@@ -85,6 +88,7 @@ npm run build   # docker compose build
 | `http://localhost:3000` | Express API (direct) |
 | `http://localhost:8080` | Logging proxy (point browser/tools here) |
 | `http://localhost:8082` | OAST interaction log |
+| `http://localhost:8090/UI/` | ZAP daemon UI |
 
 Proxy traffic is logged to stdout — view it with:
 
@@ -164,6 +168,68 @@ Flow:
 3. Both interactions appear at `http://localhost:8082` within 2 seconds
 
 Any unique subdomain can be used as a correlation ID (`abc123`, `user-test`, `payload-1`, etc.).
+
+---
+
+## ZAP scanning
+
+OWASP ZAP runs as a persistent daemon on port 8090. Reports are written to `./reports/` on the host (mounted as `/zap/wrk` inside the container).
+
+### Automation Framework plan
+
+`reports/zap.yaml` (accessible inside the container at `/zap/wrk/zap.yaml`) drives a full authenticated scan:
+
+1. **Authenticates** as `admin / password` via `POST /api/auth/login` (JSON body)
+2. **Injects** the returned JWT as `Authorization: Bearer <token>` on every request
+3. **Spiders** the SPA (2 min), runs passive rules, then launches an active scan
+4. **Writes** `reports/full.html`
+
+Both `admin` and `user` credentials are declared so ZAP can re-authenticate if a session expires mid-scan.
+
+Run the plan:
+
+```bash
+# Via the daemon REST API
+curl "http://localhost:8090/JSON/automation/action/runPlan/?filePath=/zap/wrk/zap.yaml"
+
+# Or as a one-off container
+docker compose run --rm zap zap.sh -cmd -autorun /zap/wrk/zap.yaml
+```
+
+### One-off CLI scans
+
+Run as a throwaway container against the live stack. ZAP manages its own lifecycle — the daemon service is not used.
+
+```bash
+# Baseline (passive only — spider + passive rules, ~1 min)
+docker compose run --rm zap zap-baseline.py \
+  -t http://webapp-frontend:4200 -r baseline.html
+
+# Full scan (active attack — takes several minutes)
+docker compose run --rm zap zap-full-scan.py \
+  -t http://webapp-frontend:4200 -r full.html
+
+# API scan (requires an OpenAPI spec or HAR file)
+docker compose run --rm zap zap-api-scan.py \
+  -t http://webapp-backend:3000/openapi.json -f openapi -r api.html
+```
+
+HTML reports land at `reports/<filename>.html` on the host.
+
+### Daemon REST API
+
+The ZAP daemon exposes a full REST API at `http://localhost:8090/JSON/`. Useful one-liners:
+
+```bash
+# Spider the SPA
+curl "http://localhost:8090/JSON/spider/action/scan/?url=http://webapp-frontend:4200"
+
+# Start an active scan
+curl "http://localhost:8090/JSON/ascan/action/scan/?url=http://webapp-frontend:4200&recurse=true"
+
+# Fetch the HTML report (saves to reports/ via mounted volume)
+curl "http://localhost:8090/OTHER/core/other/htmlreport/" > reports/zap-report.html
+```
 
 ---
 
