@@ -16,6 +16,8 @@ An Angular 19 single-page application served entirely by Apache httpd, intended 
 > `DELETE` and `POST /api/items` return correct status codes but do not mutate state.
 > All API responses are sent with `Cache-Control: no-store`.
 
+The OAST interaction server (DNS + HTTP callback capture) is included as a standalone Docker service in `oast/`. See [OAST server](#oast-server) below.
+
 For the Docker + real Express backend + OAST DNS testing setup, see branch **`oast-express`**.
 
 ## Project Structure
@@ -34,12 +36,18 @@ SPA_Security_Test/
 │   └── items/{1-4}.json      # GET  /api/items/:id
 ├── backend/                  # Express 5 + TypeScript API (reference only — not used here)
 │   └── src/server.ts
-└── frontend/                 # Angular 19 SPA
-    ├── angular.json          # build configurations: production, development, apache
-    └── src/
-        └── environments/
-            ├── environment.ts         # default (dev server) — all APIs on :3000
-            └── environment.apache.ts  # Apache static — split ports 3001-3004
+├── frontend/                 # Angular 19 SPA
+│   ├── angular.json          # build configurations: production, development, apache
+│   └── src/
+│       └── environments/
+│           ├── environment.ts         # default (dev server) — all APIs on :3000
+│           └── environment.apache.ts  # Apache static — split ports 3001-3004
+└── oast/                     # Standalone OAST interaction server (Docker)
+    ├── docker-compose.yml    # Run independently of the Apache setup
+    └── server/
+        ├── Dockerfile
+        ├── index.js          # DNS + HTTP capture + web UI
+        └── package.json
 ```
 
 ## How to Run
@@ -96,6 +104,42 @@ All endpoints except `/api/auth/login` require a `Bearer` token (not validated �
 | `DELETE` | `/api/items/:id`  | 3004 | JWT (unck.) |
 
 JWT (unck.) — token is forwarded but not cryptographically validated (no backend process).
+
+## OAST server
+
+The OAST server captures out-of-band DNS and HTTP interactions triggered by injected payloads. It runs as a standalone Docker service — no changes to the Apache setup are needed.
+
+### Start
+
+```bash
+cd oast
+docker compose up --build
+```
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:8082` | Live interaction log (updates every 2 s) |
+
+### What it does
+
+- **DNS** (internal port 53): resolves every `*.oast.local` query to `172.30.0.10` and logs it.
+- **HTTP capture** (internal port 80): logs every inbound HTTP request (SSRF callbacks).
+- **Web UI** (port 8082 on host): live log of all captured interactions.
+
+### Using it
+
+Craft a payload that causes the Apache backend or the SPA to issue a request to any `*.oast.local` subdomain. The subdomain acts as a correlation ID:
+
+```
+http://abc123.oast.local/callback
+```
+
+Because the OAST server runs in Docker, `*.oast.local` DNS is only resolvable from within the Docker network by default. To resolve it from the host or from Apache (running natively), either:
+
+- Add `172.30.0.10 abc123.oast.local` to your hosts file, or
+- Uncomment the port 53 lines in `oast/docker-compose.yml` and point your system DNS at `127.0.0.1` (requires admin/root).
+
+---
 
 ## Demo Credentials
 
