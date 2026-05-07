@@ -4,6 +4,8 @@ An Angular 19 single-page application with an Express 5 REST API backend, intend
 
 > **Branch `apache`** — the Angular frontend is served by Apache httpd instead of the Angular dev server. The Express backend is unchanged.
 
+The OAST interaction server (DNS + HTTP callback capture) is included as a standalone Docker service in `oast/`. See [OAST server](#oast-server) below.
+
 ## Project Structure
 
 ```
@@ -16,26 +18,32 @@ SPA_Security_Test/
 │   └── src/
 │       ├── data.ts           # In-memory seed data
 │       └── server.ts         # Express 5 API server
-└── frontend/
-    ├── angular.json
-    ├── proxy.conf.json       # Used by ng serve only (not Apache)
-    └── src/
-        └── app/
-            ├── guards/
-            │   └── auth.guard.ts
-            ├── interceptors/
-            │   └── auth.interceptor.ts
-            ├── models/
-            │   ├── item.model.ts
-            │   └── user.model.ts
-            ├── pages/
-            │   ├── home/
-            │   ├── items/
-            │   ├── login/
-            │   └── users/
-            └── services/
-                ├── api.ts    # All HTTP calls
-                └── auth.ts   # Login/logout/token (signals)
+├── frontend/
+│   ├── angular.json
+│   ├── proxy.conf.json       # Used by ng serve only (not Apache)
+│   └── src/
+│       └── app/
+│           ├── guards/
+│           │   └── auth.guard.ts
+│           ├── interceptors/
+│           │   └── auth.interceptor.ts
+│           ├── models/
+│           │   ├── item.model.ts
+│           │   └── user.model.ts
+│           ├── pages/
+│           │   ├── home/
+│           │   ├── items/
+│           │   ├── login/
+│           │   └── users/
+│           └── services/
+│               ├── api.ts    # All HTTP calls
+│               └── auth.ts   # Login/logout/token (signals)
+└── oast/                     # Standalone OAST interaction server (Docker)
+    ├── docker-compose.yml    # Run independently of the Apache + Express stack
+    └── server/
+        ├── Dockerfile
+        ├── index.js          # DNS + HTTP capture + web UI
+        └── package.json
 ```
 
 ## How to Run
@@ -116,6 +124,42 @@ All endpoints except `/api/auth/login` require a `Bearer` token in the `Authoriz
 | `GET`    | `/api/items/:id`   | JWT           | Get a single item      |
 | `POST`   | `/api/items`       | JWT           | Create an item         |
 | `DELETE` | `/api/items/:id`   | JWT + admin   | Delete an item         |
+
+## OAST server
+
+The OAST server captures out-of-band DNS and HTTP interactions triggered by injected payloads. It runs as a standalone Docker service — no changes to the Apache or Express setup are needed.
+
+### Start
+
+```bash
+cd oast
+docker compose up --build
+```
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:8082` | Live interaction log (updates every 2 s) |
+
+### What it does
+
+- **DNS** (internal port 53): resolves every `*.oast.local` query to `172.30.0.10` and logs it.
+- **HTTP capture** (internal port 80): logs every inbound HTTP request (SSRF callbacks).
+- **Web UI** (port 8082 on host): live log of all captured interactions.
+
+### Using it
+
+Craft a payload that causes the Express backend or the SPA to issue a request to any `*.oast.local` subdomain. The subdomain acts as a correlation ID:
+
+```
+http://abc123.oast.local/callback
+```
+
+Because the OAST server runs in Docker, `*.oast.local` DNS is only resolvable from within the Docker network by default. To resolve it from the host or from the Express backend (running natively), either:
+
+- Add `172.30.0.10 abc123.oast.local` to your hosts file, or
+- Uncomment the port 53 lines in `oast/docker-compose.yml` and point your system DNS at `127.0.0.1` (requires admin/root).
+
+---
 
 ## Demo Credentials
 
