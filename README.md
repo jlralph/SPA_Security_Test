@@ -38,23 +38,65 @@ SPA_Security_Test/
 │           └── services/
 │               ├── api.ts    # All HTTP calls
 │               └── auth.ts   # Login/logout/token (signals)
-└── oast/                     # Standalone OAST interaction server (Docker)
-    ├── docker-compose.yml    # Run independently of the Apache + Express stack
-    └── server/
-        ├── Dockerfile
-        ├── index.js          # DNS + HTTP capture + web UI
-        └── package.json
+├── oast/                     # OAST interaction server (DNS + HTTP capture)
+│   └── server/
+│       ├── Dockerfile
+│       ├── index.js          # DNS + HTTP capture + web UI
+│       └── package.json
+├── docker-compose.yml        # Orchestrates oast-server, backend, frontend
+├── backend.Dockerfile        # Express API container (Node 20 Alpine + tsx)
+├── frontend.Dockerfile       # Angular build → httpd:2.4-alpine serve
+└── apache.docker.conf        # Apache vhost used inside the frontend container
 ```
 
 ## How to Run
 
-### Prerequisites
+There are two ways to bring up the stack — Docker (everything containerised) or native (Apache on the host, Express on the host).
+
+### Option 1 — Docker (recommended)
+
+Both servers run as containers, no native Apache install needed.
+
+```bash
+docker compose up --build
+```
+
+Or via npm shorthand:
+
+| Script | Equivalent |
+|--------|------------|
+| `npm run docker:up` | `docker compose up --build` |
+| `npm run docker:start` | `docker compose up` |
+| `npm run docker:down` | `docker compose down` |
+| `npm run docker:build` | `docker compose build` |
+
+| URL | Purpose |
+|-----|---------|
+| `http://localhost:4200` | Angular SPA served by Apache (in container) |
+| `http://localhost:3000` | Express API direct (in container) |
+| `http://localhost:8082` | OAST interaction log (live) |
+
+The frontend container is multi-stage: Node 20 builds the Angular app, then `httpd:2.4-alpine` serves it. `apache.docker.conf` is a container variant of `apache.conf` that proxies `/api/` to `webapp-backend:3000` on the internal Docker network.
+
+The backend container's DNS is pointed at the OAST server (`172.30.0.10`) so any `*.oast.local` lookup triggered by injected payloads is captured automatically — no extra config needed.
+
+Apache logs land at `/usr/local/apache2/logs/` inside the frontend container. View them with `docker compose logs -f webapp-frontend` or `docker exec webapp-frontend cat logs/spa-security-forensic.log`.
+
+To start only the OAST server (without the SPA + backend):
+
+```bash
+docker compose up oast-server
+```
+
+### Option 2 — Native (Apache on host)
+
+#### Prerequisites
 
 - Node.js 18+
 - npm 9+
-- Apache httpd with `mod_rewrite`, `mod_proxy`, and `mod_proxy_http` enabled
+- Apache httpd with `mod_rewrite`, `mod_proxy`, `mod_proxy_http`, and `mod_headers` enabled
 
-### Install dependencies
+#### Install dependencies
 
 ```bash
 npm install
@@ -62,7 +104,7 @@ npm install --prefix backend
 npm install --prefix frontend
 ```
 
-### Build the Angular app
+#### Build the Angular app
 
 Apache serves the compiled static files, so build before starting:
 
@@ -72,7 +114,7 @@ npm run build:frontend
 
 Output lands in `frontend/dist/frontend/browser/`.
 
-### Configure Apache
+#### Configure Apache
 
 1. Enable the required modules in `httpd.conf`:
 
@@ -80,6 +122,7 @@ Output lands in `frontend/dist/frontend/browser/`.
    LoadModule rewrite_module    modules/mod_rewrite.so
    LoadModule proxy_module      modules/mod_proxy.so
    LoadModule proxy_http_module modules/mod_proxy_http.so
+   LoadModule headers_module    modules/mod_headers.so
    ```
 
 2. Add to `httpd.conf` (adjust the path to match your machine):
@@ -91,7 +134,7 @@ Output lands in `frontend/dist/frontend/browser/`.
 
 3. Restart Apache.
 
-### Start the backend
+#### Start the backend
 
 ```bash
 npm run dev          # or: npm run dev:backend
@@ -105,9 +148,13 @@ Open `http://localhost:4200` — Apache serves the Angular app and proxies all `
 
 | Script | Description |
 |--------|-------------|
-| `npm run dev` | Start the Express backend |
-| `npm run dev:backend` | Start the Express backend |
-| `npm run build:frontend` | Build the Angular app for Apache to serve |
+| `npm run dev` | Start the Express backend (native) |
+| `npm run dev:backend` | Start the Express backend (native) |
+| `npm run build:frontend` | Build the Angular app for native Apache to serve |
+| `npm run docker:up` | Build & start the Docker stack |
+| `npm run docker:start` | Start the Docker stack without rebuild |
+| `npm run docker:down` | Tear the Docker stack down |
+| `npm run docker:build` | Build the Docker images only |
 
 ## API Endpoints
 
@@ -127,14 +174,7 @@ All endpoints except `/api/auth/login` require a `Bearer` token in the `Authoriz
 
 ## OAST server
 
-The OAST server captures out-of-band DNS and HTTP interactions triggered by injected payloads. It runs as a standalone Docker service — no changes to the Apache or Express setup are needed.
-
-### Start
-
-```bash
-cd oast
-docker compose up --build
-```
+The OAST server captures out-of-band DNS and HTTP interactions triggered by injected payloads. With the Docker setup it comes up automatically alongside the backend and frontend (`docker compose up --build`).
 
 | URL | Purpose |
 |-----|---------|
@@ -154,10 +194,12 @@ Craft a payload that causes the Express backend or the SPA to issue a request to
 http://abc123.oast.local/callback
 ```
 
-Because the OAST server runs in Docker, `*.oast.local` DNS is only resolvable from within the Docker network by default. To resolve it from the host or from the Express backend (running natively), either:
+The dockerized backend has its DNS resolver pointed at `172.30.0.10`, so any lookup inside the backend container hits the OAST server immediately — no host DNS or hosts-file changes needed.
+
+To resolve `*.oast.local` from the **host** (or from a backend running natively under Option 2), either:
 
 - Add `172.30.0.10 abc123.oast.local` to your hosts file, or
-- Uncomment the port 53 lines in `oast/docker-compose.yml` and point your system DNS at `127.0.0.1` (requires admin/root).
+- Uncomment the port 53 lines in `docker-compose.yml` (the `oast-server` service) and point your system DNS at `127.0.0.1` (requires admin/root).
 
 ---
 
@@ -167,5 +209,19 @@ Because the OAST server runs in Docker, `*.oast.local` DNS is only resolvable fr
 |----------|------------|-------|
 | `admin`  | `password` | admin |
 | `user`   | `password` | user  |
+| `alice`  | `password` | user  |
 
 Admin accounts can delete users and items. Regular user accounts have read and create access only.
+
+## Logs
+
+The Apache vhost writes four log files to `<ApacheRoot>/logs/`:
+
+| File | Purpose |
+|------|---------|
+| `spa-security-forensic.log`   | Full request capture (via `mod_log_forensic` — every header and body) |
+| `spa-security-host-audit.log` | `Host` and `X-Forwarded-Host` audit (custom `hostlog` format) |
+| `spa-security-error.log`      | Apache errors for this vhost only |
+| `spa-security-access.log`     | Combined access log for this vhost only |
+
+A catch-all VirtualHost at the top of `apache.conf` rejects (`403`) any request whose `Host` header doesn't resolve to `localhost` — useful for spotting host-header injection attempts.

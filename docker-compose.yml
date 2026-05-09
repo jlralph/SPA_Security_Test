@@ -1,0 +1,57 @@
+networks:
+  app-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+services:
+  # OAST interaction server — DNS + HTTP callback capture for SSRF testing.
+  # Fixed IP so the backend can use it as its DNS resolver (resolves *.oast.local).
+  # Web UI: http://localhost:8082
+  oast-server:
+    build:
+      context: ./oast/server
+      dockerfile: Dockerfile
+    container_name: oast-server
+    restart: unless-stopped
+    environment:
+      OAST_IP: "172.30.0.10"
+      OAST_DOMAIN: "oast.local"
+      UPSTREAM_DNS: "8.8.8.8"
+    ports:
+      - "8082:8080"
+      # Uncomment to expose DNS on the host (requires admin/root):
+      # - "53:53/udp"
+      # - "53:53/tcp"
+    networks:
+      app-net:
+        ipv4_address: 172.30.0.10
+
+  webapp-backend:
+    build:
+      context: .
+      dockerfile: backend.Dockerfile
+    container_name: webapp-backend
+    restart: unless-stopped
+    depends_on:
+      - oast-server
+    ports:
+      - "3000:3000"
+    dns:
+      - 172.30.0.10
+    networks:
+      - app-net
+
+  webapp-frontend:
+    build:
+      context: .
+      dockerfile: frontend.Dockerfile
+    container_name: webapp-frontend
+    restart: unless-stopped
+    depends_on:
+      - webapp-backend
+    ports:
+      - "4200:4200"
+    networks:
+      - app-net

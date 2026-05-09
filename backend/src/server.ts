@@ -128,6 +128,26 @@ app.delete('/api/items/:id', requireAuth, requireAdmin, (req: Request, res: Resp
   res.status(204).send();
 });
 
+// ── GET /api/ssrf-test ────────────────────────────────────────────────────────
+// Intentionally vulnerable endpoint for local OAST testing.
+// Fetches a caller-supplied URL, triggering DNS + HTTP interactions on
+// the oast-server when a *.oast.local payload is used.
+
+app.get('/api/ssrf-test', async (req: Request, res: Response): Promise<void> => {
+  const url = req.query['url'] as string | undefined;
+  if (!url) {
+    res.status(400).json({ error: 'url query parameter required' });
+    return;
+  }
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const text = await response.text();
+    res.json({ status: response.status, body: text.slice(0, 500) });
+  } catch (err: unknown) {
+    res.json({ status: 'error', error: (err as Error).message });
+  }
+});
+
 // ── Start ─────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
@@ -142,4 +162,5 @@ app.listen(PORT, () => {
   console.log('  GET    /api/items/:id    (auth)');
   console.log('  POST   /api/items        (auth)');
   console.log('  DELETE /api/items/:id    (auth + admin)');
+  console.log('  GET    /api/ssrf-test    (no auth — test only)');
 });

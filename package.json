@@ -5,7 +5,11 @@
     "dev": "npm run dev:backend",
     "dev:backend": "npm run dev --prefix backend",
     "build:frontend": "npm run build --prefix frontend",
-    "dev:frontend": "echo \"Frontend is served by Apache. Build with 'npm run build:frontend' then start Apache — see apache.conf.\""
+    "dev:frontend": "echo \"Frontend is served by Apache. Build with 'npm run build:frontend' then start Apache — see apache.conf.\"",
+    "docker:up":    "docker compose up --build",
+    "docker:start": "docker compose up",
+    "docker:down":  "docker compose down",
+    "docker:build": "docker compose build"
   },
   "devDependencies": {
     "concurrently": "^9.2.1"

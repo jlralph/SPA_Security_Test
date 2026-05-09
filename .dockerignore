@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/.angular
+**/.vscode
+**/coverage
+**/*.log
+.git
+.gitignore
+.dockerignore
+.worktree
+oast
