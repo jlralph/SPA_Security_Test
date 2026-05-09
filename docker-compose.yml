@@ -51,6 +51,10 @@ services:
     restart: unless-stopped
     depends_on:
       - webapp-backend
+    environment:
+      # secure   — host-header validation, header stripping, no TRACE
+      # insecure — host-header injection allowed, ProxyPreserveHost On, TRACE on
+      APACHE_MODE: "${APACHE_MODE:-secure}"
     ports:
       - "4200:4200"
     networks:

@@ -46,7 +46,8 @@ SPA_Security_Test/
 ├── docker-compose.yml        # Orchestrates oast-server, backend, frontend
 ├── backend.Dockerfile        # Express API container (Node 20 Alpine + tsx)
 ├── frontend.Dockerfile       # Angular build → httpd:2.4-alpine serve
-└── apache.docker.conf        # Apache vhost used inside the frontend container
+├── apache.docker.secure.conf    # Container vhost — hardened (default)
+└── apache.docker.insecure.conf  # Container vhost — vulnerable (demo mode)
 ```
 
 ## How to Run
@@ -76,7 +77,7 @@ Or via npm shorthand:
 | `http://localhost:3000` | Express API direct (in container) |
 | `http://localhost:8082` | OAST interaction log (live) |
 
-The frontend container is multi-stage: Node 20 builds the Angular app, then `httpd:2.4-alpine` serves it. `apache.docker.conf` is a container variant of `apache.conf` that proxies `/api/` to `webapp-backend:3000` on the internal Docker network.
+The frontend container is multi-stage: Node 20 builds the Angular app, then `httpd:2.4-alpine` serves it. The Apache vhost is picked at startup from one of two configs baked into the image — `apache.docker.secure.conf` (default) or `apache.docker.insecure.conf` — controlled by the `APACHE_MODE` env var. See [Apache mode](#apache-mode-secure--insecure).
 
 The backend container's DNS is pointed at the OAST server (`172.30.0.10`) so any `*.oast.local` lookup triggered by injected payloads is captured automatically — no extra config needed.
 
@@ -171,6 +172,69 @@ All endpoints except `/api/auth/login` require a `Bearer` token in the `Authoriz
 | `GET`    | `/api/items/:id`   | JWT           | Get a single item      |
 | `POST`   | `/api/items`       | JWT           | Create an item         |
 | `DELETE` | `/api/items/:id`   | JWT + admin   | Delete an item         |
+
+## Apache mode (secure / insecure)
+
+The frontend container ships with two Apache vhost configurations and picks one at startup based on the `APACHE_MODE` env var. Both are baked into the image, so switching modes is a container restart — no rebuild needed.
+
+| Mode | File | Purpose |
+|------|------|---------|
+| `secure` (default) | `apache.docker.secure.conf` | Hardened — host-header validation, header stripping, `ProxyPreserveHost Off`, `TraceEnable Off`, catch-all 403 vhost |
+| `insecure` | `apache.docker.insecure.conf` | Intentionally vulnerable — accepts any Host header, passes client headers through, `ProxyPreserveHost On`, `TraceEnable On`, `ServerAlias *` |
+
+### What's different in `insecure` mode
+
+| Protection (secure) | Removed in insecure | Why it matters |
+|---------------------|---------------------|----------------|
+| Catch-all vhost rejects unknown Host headers | Any Host accepted | Lets you craft host-header injection payloads |
+| `RequestHeader unset` for `X-Forwarded-Host`, `X-Original-Host`, `X-Host`, `X-Rewrite-URL` | Headers pass through | Backend trusts attacker-controlled headers |
+| `RequestHeader set X-Forwarded-Host "localhost"` | Not overridden | Backend uses whatever the client sent |
+| Host validation rule `^(www\.)?localhost(:\d+)?$` | Not enforced | Arbitrary Host headers reach the backend |
+| `ProxyPreserveHost Off` | `On` | Original `Host` header forwarded to Express — enables password-reset poisoning, web-cache poisoning |
+| `TraceEnable Off` (Apache default) | `On` | XST-style attacks possible |
+
+### Switching modes
+
+The frontend container picks up `APACHE_MODE` from the shell environment. Syntax differs per shell:
+
+**bash / zsh / git-bash:**
+```bash
+docker compose up --build                       # secure (default)
+APACHE_MODE=insecure docker compose up -d       # insecure
+APACHE_MODE=secure   docker compose up -d       # back to secure
+```
+
+**Windows CMD:**
+```cmd
+docker compose up --build
+set APACHE_MODE=insecure && docker compose up -d
+set APACHE_MODE=secure   && docker compose up -d
+set APACHE_MODE=                                  :: clear (back to default)
+```
+
+**Windows PowerShell:**
+```powershell
+docker compose up --build
+$env:APACHE_MODE="insecure"; docker compose up -d
+$env:APACHE_MODE="secure";   docker compose up -d
+Remove-Item Env:APACHE_MODE                       # clear (back to default)
+```
+
+Or put `APACHE_MODE=insecure` in a `.env` file at the repo root and just run `docker compose up -d` — Compose reads the file automatically and you avoid shell-specific syntax entirely.
+
+The frontend container will recreate to pick up the new env var. You'll see `Apache starting in <mode> mode` in the logs (`docker compose logs webapp-frontend | head`).
+
+### Demo: host-header injection
+
+After switching to insecure mode:
+
+```bash
+curl -H "Host: evil.example.com" http://localhost:4200/api/profile
+```
+
+In secure mode this returns `403`. In insecure mode it proxies through and the backend sees `Host: evil.example.com` (visible in `spa-security-host-audit.log` inside the frontend container).
+
+---
 
 ## OAST server
 
